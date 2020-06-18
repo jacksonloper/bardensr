@@ -1,0 +1,6 @@
+tensorflow >=2.1.0
+scikit-image
+tqdm
+matplotlib
+scipy
+pandas
