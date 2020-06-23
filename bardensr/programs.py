@@ -8,7 +8,7 @@ import tensorflow as tf
 import logging
 logger = logging.getLogger(__name__)
 
-def solve_square_nnls(X,Xt,lam,eps=1e-10):
+def solve_square_nnls(Xtilde_against_Xtilde,X_against_Xtilde,Xtilde_rowsums,lam,eps=1e-10):
     r'''
     Consider the loss
 
@@ -17,17 +17,21 @@ def solve_square_nnls(X,Xt,lam,eps=1e-10):
     This function uses sp.optimize.nnls to find the best possible value for $\varphi$.  This function is slow if $n$ is large.
 
     Input:
-    - X -- a (M x N) tf2 tensor
-    - Xt -- a (M x N) tf2 tensor
+    - Xtilde_against_Xtilde -- a (N x N) tf2 matrix giving Xtilde.T @ Xtilde
+    - X_against_Xtilde -- a (N x N) tf2 matrix giving X.T @ Xtilde
+    - Xtilde_rowsums -- a (N) tf2 vector giving sum(Xtilde,axis=0)
     - lam -- scalar
     - [optional] -- eps=1e-10 (for numerical stability)
 
     Output: best possible varphi
     '''
+    raise Exception("NYI")
+
+
     n=Xt.shape[1]
 
-    Gamma = (tf.transpose(Xt)@Xt).numpy()
-    phi = ((tf.transpose(X) - lam)@Xt).numpy()
+    Gamma = Xtilde_against_Xtilde.numpy()
+    phi = X_against_Xtilde.numpy() - lam*Xtilde_rowsums.numpy()[:,None]
     A=sp.linalg.cholesky(Gamma+np.eye(Gamma.shape[0])*eps,lower=False)
 
     varphi=np.ones(n)
@@ -36,49 +40,12 @@ def solve_square_nnls(X,Xt,lam,eps=1e-10):
         varphi[n]= sp.optimize.nnls(A,b)[0]
     return tf.convert_to_tensor(varphi,dtype=tf.float64)
 
-def solve_diagonal_nnls(X,Xt,lam,lo=1e-10,denomthresh=1e-10,defaultvalue=1):
-    r'''
-    Consider the loss
-
-    $$L(\alpha) = \frac{1}{2} \sum_{mn} \left(\mathbf{X}_{mn} - \mathbf{\tilde{X}}_{m,n} \alpha_{n} \right)^2 + \lambda \sum_{mn}\mathbf{\tilde{X}}_{m,n} \alpha_{n}$$
-
-    This function finds the best value for $\alpha$ subject to the constarint $\alpha_n > \mathtt{lo}$ for each $n$.
-
-        Input:
-        - X -- a (M x N) tf2 tensor
-        - Xt -- a (M x N) tf2 tensor
-        - lam (scalar)
-        - lo (scalar)
-        - [optional] denomthresh=1e-10
-        - [optional] defaultvalue=1
-
-        Output: best possible alpha
-
-    If sum_m X_mn^2 =0 for some n, this is ill-posed for alpha[n].  So if
-    sum_m X_mn^2<denomthresh for a particular n we set the value of alpha[n] to
-    whatever is in "defaultvalue"
-    '''
-    # get the update
-    Xmabl = X-self.lam
-    numerator = tf.einsum('mrc,mrc->rc',Xt,Xmabl)
-    denom = tf.reduce_sum(Xt**2,axis=0)
-
-    # handle possibly zero denominators
-    good = denom>self.lo
-    alpha=tf.where(good,numerator/denom,tf.ones_like(numerator)*defaultvalue)
-
-    # clip
-    alpha=tf.clip_by_value(alpha,lo,np.inf)
-
-    return alpha
-
 @tf.function(autograph=False)
 def KKGTG(x,K,Gt,G):
     '''
     returns K@K@x@G.T@G
     '''
     return K(K(x@Gt)) @ G
-
 
 def calc_matrix_nnls_loss(X,G,F,K,lam):
     Xt = K(F)@tf.transpose(G)

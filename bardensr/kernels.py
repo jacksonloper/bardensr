@@ -16,5 +16,6 @@ def heat_kernel(X,niter,axis=0):
 @tf.function(autograph=False)
 def heat_kernel_nd(X,niters):
     for i in range(len(niters)):
-        X=heat_kernel(X,niters[i],axis=i)
+        if niters[i]>0:
+            X=heat_kernel(X,niters[i],axis=i)
     return X
