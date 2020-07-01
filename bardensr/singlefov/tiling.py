@@ -26,12 +26,13 @@ def tiles2multitiles(*tiles):
 
 def tile_up(length,inner_sz,border_sz):
     '''
-    batches a stretch of indices up into overlapping tiles.
+    batches a stretch of indices up into overlapping tiles
+    for one dimension.
 
     Input:
-    - length
-    - inner_sz
-    - border_sz
+    - length (1000)
+    - inner_sz (250)
+    - border_sz (7)
 
     Output is a list of Tile objects
 
@@ -47,7 +48,7 @@ def tile_up(length,inner_sz,border_sz):
     [13,22]          [2,7]        [15,20]
     [18,24]          [2,6]        [20,24]
 
-                        1 1 1 1 1 1 1 1 1 1 2 2 2 2
+                        1 1 1 1 1 1 1 1 1 1 2 2 2 2  # what is this line?
     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
     . . . . . . . . . . . . . . . . . . . . . . . .|
     0 1 2 3 4 5 6                                  |
@@ -55,13 +56,9 @@ def tile_up(length,inner_sz,border_sz):
                     0 1 2 3 4 5 6 7 8              |
                               0 1 2 3 4 5 6 7 8    |
                                         0 1 2 3 4 5|
-
-
-
     '''
-
-    ib = inner_sz+border_sz
-    ib2 = inner_sz + border_sz*2
+    ib = inner_sz+border_sz   # 250 + 7
+    ib2 = inner_sz + border_sz*2  # 250 + 2*7
 
     if ib >= length:
         # only one tile!
@@ -71,11 +68,12 @@ def tile_up(length,inner_sz,border_sz):
         grabblocks=[]
         putblocks=[]
 
+        ## add the first block 
         lookblocks.append(slice(0,ib))
         grabblocks.append(slice(0,inner_sz))
         putblocks.append(slice(0,inner_sz))
 
-        def get_next_block(st):
+        def get_next_block(st):            
             en = st+ib2
             if en>length:
                 # uh oh.  this is our last tile!
@@ -85,18 +83,23 @@ def tile_up(length,inner_sz,border_sz):
                 return False
             else:
                 # regular old tile
-                lookblocks.append(slice(st,en))
-                grabblocks.append(slice(border_sz,ib))
-                putblocks.append(slice(st+border_sz,en-border_sz))
+                lookblocks.append(slice(st,en)) # (251, 251+250+2*border)
+                grabblocks.append(slice(border_sz,ib))  # (7, 257), always the size of 250 (except edges)
+                putblocks.append(slice(st+border_sz,en-border_sz))  
                 return True
 
-        while get_next_block(putblocks[-1].stop+1):
+        while get_next_block(putblocks[-1].stop-border_sz):  
+#         while get_next_block(putblocks[-1].stop+1):  
             pass
 
         return [Tile(*x) for x in zip(lookblocks,grabblocks,putblocks)]
 
-def tile_up_nd(shp,inner_szs,border_szs):
-    lgps = [tile_up(sh,i,b) for (sh,i,b) in zip(shp,inner_szs,border_szs)]
+def tile_up_nd(shp,inner_szs,border_szs):   # (M1, M2, 1), (250, 250, 1), (7,7,1)
+    '''
+    (sh,i,b) returns a list of length 3, for x, y, z dimensions. 
+    e.g., [(1000, 250, 7), (1000, 250, 7), (1, 1, 1)]
+    '''
+    lgps = [tile_up(sh,i,b) for (sh,i,b) in zip(shp,inner_szs,border_szs)]  
     tiles=list(itertools.product(*lgps))
     mt=[tiles2multitiles(*x) for x in tiles]
     return mt

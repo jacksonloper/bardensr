@@ -7,10 +7,11 @@ import scipy.spatial.distance
 from .. import kernels
 import numpy.random as npr
 
-def sim_onehot_code_against_unknown_codes(codes,lim=100,hamdst=3):
+def sim_onehot_code_against_unknown_codes(codes,lim=100,hamdst=3, random_seed = 630):
     R,C,J=codes.shape
     N=R*C
 
+    npr.seed(random_seed)
     codes = np.reshape(codes,(N,J)).T
 
     for i in range(lim):
@@ -50,6 +51,7 @@ def simulate(
         noise=.01,
         scale_lo=.5,
         scale_hi=1.5,
+        random_seed = 630
 ):
     '''
     Simulates an observation tensor according to the singlefov model (described above).
@@ -82,7 +84,8 @@ def simulate(
     we will just use the given codebook
 
     '''
-
+    npr.seed(random_seed)
+    
     # make codebook
     if codebook=='one-hot':
         R=n_rounds
