@@ -184,12 +184,12 @@ def process(
         Fs.append(model2.F_scaled()[tile.grab])    
       
         # get threshold for this tile. 
-        Funused_tile = model2.F_scaled()[tile.grab][:,:,:,-n_unused_barcodes:]
-        Funused_tile = Funused_tile.reshape((-1,n_unused_barcodes))
-        thresh_temp = np.percentile(Funused_tile,unused_barcode_percentile_by_voxel,axis=0)
-        thresh_temp = np.percentile(thresh_temp,unused_barcode_percentile_by_code,axis=0)
-        thresh_temp = thresh_temp*unused_barcode_threshold_multiplier
-        thresh_tile = max(thresh_tile, thresh_temp)
+#         Funused_tile = model2.F_scaled()[tile.grab][:,:,:,-n_unused_barcodes:]
+#         Funused_tile = Funused_tile.reshape((-1,n_unused_barcodes))
+#         thresh_temp = np.percentile(Funused_tile,unused_barcode_percentile_by_voxel,axis=0)
+#         thresh_temp = np.percentile(thresh_temp,unused_barcode_percentile_by_code,axis=0)
+#         thresh_temp = thresh_temp*unused_barcode_threshold_multiplier
+#         thresh_tile = max(thresh_tile, thresh_temp)
             
     # stitch it together as a sparse matrix
     M1s=[]
@@ -200,42 +200,44 @@ def process(
     for i,tile in enumerate(tiles):
         tile=tiles[i]        
         
-#         M1sub,M2sub,M3sub,genesub=np.where(Fs[i]>thresh_tile)  # changed from 0.         
+        M1sub,M2sub,M3sub,genesub=np.where(Fs[i]>0)  # changed from 0. (potentially thresh_tile)         
     
-    # **** added 06/30/3030
-        M1sub = np.array(())
-        M2sub = np.array(())
-        M3sub = np.array(())
-        genesub = np.array(())
-        for j in range(Fs[i].shape[-1]):
-            loc_model = peak_local_max(Fs[i][:,:,:,j],
-                                               threshold_abs = 1*thresh_tile,
-                                               exclude_border=False)
-            if loc_model.shape[0] !=0:
-                M1sub = np.append(M1sub, (loc_model[:, 0])).astype(int)
-                M2sub = np.append(M2sub, (loc_model[:, 1])).astype(int)
-                M3sub = np.append(M3sub, (loc_model[:, 2])).astype(int)
-                genesub = np.append(genesub, np.repeat(j, loc_model.shape[0])).astype(int)
-        assert(M1sub.shape == genesub.shape)
-    # **** end. added 06/30/3030
-        
-        vsub=Fs[i][M1sub,M2sub,M3sub,genesub]
-        M1sub+=tile.put[0].start
-        M2sub+=tile.put[1].start
-        M3sub+=tile.put[2].start
-        genesub=codes[i][genesub]
-        M1s.append(M1sub)
-        M2s.append(M2sub)
-        M3s.append(M3sub)
-        genes.append(genesub)
-        values.append(vsub)
+#     # **** added 06/30/2020
+#         M1sub = np.array(())
+#         M2sub = np.array(())
+#         M3sub = np.array(())
+#         genesub = np.array(())
+#         for j in range(Fs[i].shape[-1]):
+#             loc_model = peak_local_max(Fs[i][:,:,:,j],
+#                                                threshold_abs = 1*thresh_tile,
+#                                                exclude_border=False)
+#             if loc_model.shape[0] !=0:
+#                 M1sub = np.append(M1sub, (loc_model[:, 0])).astype(int)
+#                 M2sub = np.append(M2sub, (loc_model[:, 1])).astype(int)
+#                 M3sub = np.append(M3sub, (loc_model[:, 2])).astype(int)
+#                 genesub = np.append(genesub, np.repeat(j, loc_model.shape[0])).astype(int)
+#         assert(M1sub.shape == genesub.shape)
+#     # **** end. added 06/30/2020
+    
+        if len(M1sub)!=0:
+            vsub=Fs[i][M1sub,M2sub,M3sub,genesub]
+            assert(len(vsub) == M1sub.shape[0])
+            M1sub+=tile.put[0].start
+            M2sub+=tile.put[1].start
+            M3sub+=tile.put[2].start
+            genesub=codes[i][genesub]
+            M1s.append(M1sub)
+            M2s.append(M2sub)
+            M3s.append(M3sub)
+            genes.append(genesub)
+            values.append(vsub)
 
     return dict(
         values=np.concatenate(values),
-        m1=np.concatenate(M1s),
-        m2=np.concatenate(M2s),
-        m3=np.concatenate(M3s),
-        j=np.concatenate(genes)
+        m1=np.concatenate(M1s).astype(int),
+        m2=np.concatenate(M2s).astype(int),
+        m3=np.concatenate(M3s).astype(int),
+        j=np.concatenate(genes).astype(int)
     )
 
 def sparse2dense(m1,m2,m3,j,values=None,shape=None):

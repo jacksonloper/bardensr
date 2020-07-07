@@ -228,12 +228,14 @@ class Model:
         F=tf.reshape(F,(self.M,self.J))
 
         FZ = tf.einsum('mj,rcj->mrc',F,Z)
+#         print(FZ.shape)  # M, R, C
         FZ_gamma = tf.einsum('mrc,mrk->rck',FZ,FZ)
 
         varphi=self.varphi.numpy()
         for c1 in range(self.C):
             Gamma_c = tf.einsum('r,rck->ck',self.alpha[:,c1]**2,FZ_gamma).numpy()
-            phi_c = tf.einsum('r,mr,mrc->c',self.alpha[:,c1],xmabl[:,:,c1],FZ).numpy()
+#             phi_c = tf.einsum('r,mr,mrc->c',self.alpha[:,c1],xmabl[:,:,c1],FZ).numpy()   this gives warning. 
+            phi_c = tf.einsum('mr,mrc->c', tf.einsum('r,mr->mr', self.alpha[:, c1],xmabl[:, :, c1]), FZ).numpy()
             A,b=helpers.quadratic_form_to_nnls_form(Gamma_c,phi_c)
             varphi[c1]= sp.optimize.nnls(A,b)[0]
         self.varphi=tf.convert_to_tensor(varphi,dtype=tf.float64)
