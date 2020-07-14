@@ -53,8 +53,12 @@ def process(
     n_unused_barcodes=4,
     unused_barcodes=None,
     unused_barcode_threshold_multiplier=1.0,
-    unused_barcode_percentile_by_voxel=1.0,
-    unused_barcode_percentile_by_code=1.0,
+    unused_barcode_percentile_by_voxel=100.0,
+    unused_barcode_percentile_by_code=100.0,
+    phase_I_initial_iterations=10,
+    phase_II_initial_iterations=10,
+    phase_I_final_iterations=200,
+    phase_II_final_iterations=200,
     tqdm_notebook=False,
     tqdm_notebook_bytile=False,
     blur_level=(3,3,0),
@@ -69,38 +73,46 @@ def process(
     - downsample_level=(10,10,2)
     - tile_size=(200,200,10)
     - phase_I_lambda=.01
+    - phase_I_initial_iterations=10
+    - phase_I_final_iterations=200
     - phase_II_learn=()
     - phase_II_lambda=.1
+    - phase_II_initial_iterations=10
+    - phase_II_final_iterations=200
     - n_unused_barcodes=4
-    - unused_barcodes=None
+    - unused_barcodes=None (or an array of shape (R, C, n_unused_barcodes))
     - unused_barcode_threshold_multiplier=1.0
     - unused_barcode_percentile_by_voxel=100
     - unused_barcode_percentile_by_code=100
     - tqdm_notebook=True
 
     Output: a sparse representation of where rolony densities are significant
-    - vals  -- each entry represents the estimated density present at a particular place --
-    - m1s   -- these represent the relevant m1 location
-    - m2s   -- these represent the relevant m2 location
-    - m3s   -- these represent the relevant m3 location
-    - bcds -- these represent the relevant barcode
+    - values  -- each entry represents the estimated density present at a particular place --
+    - m1   -- these represent the relevant m1 location
+    - m2   -- these represent the relevant m2 location
+    - m3   -- these represent the relevant m3 location
+    - j -- these represent the relevant barcode
     That is, for each i, we have that the density at position m1s[i],m2s[i],m3s[i]
     corresponding to barcode bcds[i] has activity level vals[i].  The largest
     barcode indices will correspond to the unused barcodes.
 
     This algorithm proceeeds in two phases.
-    - Phase I.  Downsample and learn F,alpha,varphi,rho,a,b on downsampled data.
+    - Phase I.  Downsample and learn F,alpha,varphi,rho,a,b on downsampled data.  This learning
+    is an optimization process which uses phase_I_initial_iterations to get an initial guess for F
+    and then uses phase_I_final_iterations to optimize the other parameters.
     - Phase II.  Break into tiles.  For each tile, unused barcodes give threshold
-    to discern codes which can be ignored.  Run on the reduced
+    to discern codes which can be ignored.  Learn parameters with this reduced
     set of codes for this tile, thereby learning F,a (and, optionally, alpha,varphi,rho,b).
-    We then stitch tiles back together, store resulting F as a sparse matrix.
+    For each tile, we use phase_II_initial_iterations and phase_II_final_iterations for
+    the learning process.  We then stitch tiles back together, store resulting F as a
+    sparse matrix.
 
     A note on the "unused_barcodes."  We train the model in phase I and phase II as if
     the unused barcodes were present in the data.  We then estimate the density F.  We then
     compute the unused_barcode_threshold by
     - computing the `unused_barcode_percentile_by_voxel` percentile of the density values
     over voxels for each unused barcode
-    - computing the `unused_barcodew_percentile_by_code` percentile over the resulting values
+    - computing the `unused_barcode_percentile_by_code` percentile over the resulting values
     found for each unused barcode
     - multiplying by `unused_barcode_threshold_multiplier`
     We then use this threshold as a way to help guess where density activity is high
@@ -132,8 +144,8 @@ def process(
                 blur_level=[bl//dl for (bl,dl) in zip(blur_level,downsample_level)],
     )
     trainer=training.Trainer(Xs,model)
-    trainer.train(['F'],10,tqdm_notebook=tqdm_notebook)
-    trainer.train(['alpha','varphi','rho','a','b','F'],20,tqdm_notebook=tqdm_notebook)
+    trainer.train(['F'],phase_I_initial_iterations,tqdm_notebook=tqdm_notebook)
+    trainer.train(['alpha','varphi','rho','a','b','F'],phase_I_final_iterations,tqdm_notebook=tqdm_notebook)
     F = model.F_scaled()
 
 
@@ -171,9 +183,9 @@ def process(
         model2=denselearner.Model(B_little,Xsub.shape[:3],lam=phase_II_lambda,blur_level=blur_level)
         trainer=training.Trainer(Xsub,model2)
 
-        trainer.train(['F'],10,tqdm_notebook=tqdm_notebook_bytile)
+        trainer.train(['F'],phase_II_initial_iterations,tqdm_notebook=tqdm_notebook_bytile)
         nms=phase_II_learn + ('a','F')
-        trainer.train(nms,20,tqdm_notebook=tqdm_notebook_bytile)
+        trainer.train(nms,phase_II_final_iterations,tqdm_notebook=tqdm_notebook_bytile)
 
         # save it
         codes.append(np.where(good)[0])

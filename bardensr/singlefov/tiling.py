@@ -96,6 +96,15 @@ def tile_up(length,inner_sz,border_sz):
         return [Tile(*x) for x in zip(lookblocks,grabblocks,putblocks)]
 
 def tile_up_nd(shp,inner_szs,border_szs):
+    '''
+    Input:
+    - shape
+    - inner_szs (one for each dim in shape)
+    - border_szs(one for each dim in shape)
+
+    Output
+    - a list of MultiTile objects
+    '''
     lgps = [tile_up(sh,i,b) for (sh,i,b) in zip(shp,inner_szs,border_szs)]
     tiles=list(itertools.product(*lgps))
     mt=[tiles2multitiles(*x) for x in tiles]
