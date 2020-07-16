@@ -76,6 +76,10 @@ def tile_up(length,inner_sz,border_sz):
         putblocks.append(slice(0,inner_sz))
 
         def get_next_block(st):
+            '''
+            creates another block, with lookblock starting
+            at st
+            '''
             en = st+ib2
             if en>length:
                 # uh oh.  this is our last tile!
@@ -90,7 +94,7 @@ def tile_up(length,inner_sz,border_sz):
                 putblocks.append(slice(st+border_sz,en-border_sz))
                 return True
 
-        while get_next_block(putblocks[-1].stop+1):
+        while get_next_block(putblocks[-1].stop-border_sz):
             pass
 
         return [Tile(*x) for x in zip(lookblocks,grabblocks,putblocks)]
