@@ -130,7 +130,7 @@ def process(
             newcode=simulation.sim_onehot_code_against_unknown_codes(B_supplemented)
             B_supplemented=np.concatenate([B_supplemented,newcode[:,:,None]],axis=-1)
     else:
-        n_unused_barcodes=len(unused_barcodes)
+        n_unused_barcodes=unused_barcodes.shape[-1]
         B_supplemented=np.concatenate([B,unused_barcodes],axis=-1)
 
     #####################
