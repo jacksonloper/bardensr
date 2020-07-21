@@ -6,7 +6,7 @@ setup(
     version='0.1',
     include_package_data=True,
     description='barcode demixing through nonnegative spatial regression',
-    packages=['bardensr'],
+    packages=['bardensr','bardensr.singlefov'],
     package_data={
         '': ['*.pkl']
     },
