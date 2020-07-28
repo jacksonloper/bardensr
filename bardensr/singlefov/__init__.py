@@ -141,7 +141,6 @@ def process(
 
     #####################
     # PHASE II!
-
     if tqdm_notebook:
         print("Phase II")
 
@@ -154,20 +153,19 @@ def process(
 
     # tile it up!
     blx3 = [x*3+1 for x in blur_level]  # (7, 7, 1)
-    tiles = tiling.tile_up_nd(X.shape[:3],tile_size,blx3)
+    tiles = tiling.tile_up_nd(X.shape[:3],tile_size,blx3) # returns a list. 
 
     # process each tile
     Fs=[]
     codes=[]
-    thresh_tile = 0
-#     trange=tiles
+    svd_list = []
+
     for tile in maybe_tqdm(tiles,tqdm_notebook):
         dtile = tiling.downsample_multitile(tile,downsample_level)  # downsampled ver. 
         Xsub = X[tile.look] # get sub-data
         Fsub = F[dtile.look] # get sub-densities
         Fsubrav = np.reshape(Fsub,(-1,J+n_unused_barcodes))
-        good=np.max(Fsubrav,axis=0)>thresh # get barcodes with promise
-#         print((good==True).sum())
+        good=np.max(Fsubrav,axis=0)>thresh # get barcodes with promise - retunrs a boolean 
         good[-n_unused_barcodes:]=True # always keep the unused barcodes
 
         # train on the little tile!
@@ -180,16 +178,29 @@ def process(
         trainer.train(nms,20,tqdm_notebook=tqdm_notebook_bytile)
 
         # save it
-        codes.append(np.where(good)[0])
+        codes.append(np.where(good)[0])  # id of the kept barcodes. 
         Fs.append(model2.F_scaled()[tile.grab])    
       
         # get threshold for this tile. 
-#         Funused_tile = model2.F_scaled()[tile.grab][:,:,:,-n_unused_barcodes:]
-#         Funused_tile = Funused_tile.reshape((-1,n_unused_barcodes))
-#         thresh_temp = np.percentile(Funused_tile,unused_barcode_percentile_by_voxel,axis=0)
-#         thresh_temp = np.percentile(thresh_temp,unused_barcode_percentile_by_code,axis=0)
-#         thresh_temp = thresh_temp*unused_barcode_threshold_multiplier
-#         thresh_tile = max(thresh_tile, thresh_temp)
+        Funused_tile = model2.F_scaled()[tile.grab][:,:,:,-n_unused_barcodes:]
+        Funused_tile = Funused_tile.reshape((-1,n_unused_barcodes))
+        thresh_tile = np.percentile(Funused_tile,unused_barcode_percentile_by_voxel,axis=0)
+        thresh_tile = np.percentile(thresh_tile,unused_barcode_percentile_by_code,axis=0)
+        thresh_tile = thresh_tile*unused_barcode_threshold_multiplier
+#         print('*tile threshold: ', thresh_tile)
+        
+        # get cleaned image and run svd
+        svd_tile = dict()  
+        for j in range(len(codes[-1])):
+            svd_tile_j = processing.cleaned_img_svd(Xsub = Xsub, 
+                                                    model = model2,   # this is the fine model using B_little
+                                                    thre = thresh_tile, 
+                                                    j = j, 
+                                                    m = 5,
+                                                    tile_grab = tile.grab
+                                                   )
+            svd_tile[codes[-1][j]] = svd_tile_j     # returns the dictionary with J' (J':num of barcodes in this patch)
+        svd_list.append(svd_tile)
             
     # stitch it together as a sparse matrix
     M1s=[]
@@ -198,26 +209,8 @@ def process(
     genes=[]
     values=[]    
     for i,tile in enumerate(tiles):
-        tile=tiles[i]        
-        
-        M1sub,M2sub,M3sub,genesub=np.where(Fs[i]>0)  # changed from 0. (potentially thresh_tile)         
-    
-#     # **** added 06/30/2020
-#         M1sub = np.array(())
-#         M2sub = np.array(())
-#         M3sub = np.array(())
-#         genesub = np.array(())
-#         for j in range(Fs[i].shape[-1]):
-#             loc_model = peak_local_max(Fs[i][:,:,:,j],
-#                                                threshold_abs = 1*thresh_tile,
-#                                                exclude_border=False)
-#             if loc_model.shape[0] !=0:
-#                 M1sub = np.append(M1sub, (loc_model[:, 0])).astype(int)
-#                 M2sub = np.append(M2sub, (loc_model[:, 1])).astype(int)
-#                 M3sub = np.append(M3sub, (loc_model[:, 2])).astype(int)
-#                 genesub = np.append(genesub, np.repeat(j, loc_model.shape[0])).astype(int)
-#         assert(M1sub.shape == genesub.shape)
-#     # **** end. added 06/30/2020
+        tile=tiles[i]          
+        M1sub,M2sub,M3sub,genesub=np.where(Fs[i]>0)  # changed from 0. (potentially thresh_tile)                 
     
         if len(M1sub)!=0:
             vsub=Fs[i][M1sub,M2sub,M3sub,genesub]
@@ -237,10 +230,11 @@ def process(
         m1=np.concatenate(M1s).astype(int),
         m2=np.concatenate(M2s).astype(int),
         m3=np.concatenate(M3s).astype(int),
-        j=np.concatenate(genes).astype(int)
+        j=np.concatenate(genes).astype(int),
+        svd = svd_list
     )
 
-def sparse2dense(m1,m2,m3,j,values=None,shape=None):
+def sparse2dense(m1,m2,m3,j,values=None,shape=None, svd = None):
     if shape is None:
         shape=[np.max(x)+1 for x in [m1,m2,m3,j]]
     if values is None:
