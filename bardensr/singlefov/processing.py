@@ -131,6 +131,7 @@ def cleaned_img_svd(Xsub, model, thre, j, tile_grab, m=5):  # for one/ patch.
     Fs = model.F_scaled(blurred = True)
     loc_model = skimage.feature.peak_local_max(Fs[:,:,:,j],
                                                threshold_abs = thre,
+                                               min_distance = 3, 
                                                exclude_border=False)
     loc_model = rm_edge_spots(target_j = loc_model.astype(int), 
                               tile_grab = tile_grab,
