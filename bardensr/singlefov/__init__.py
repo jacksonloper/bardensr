@@ -189,17 +189,18 @@ def process(
         thresh_tile = thresh_tile*unused_barcode_threshold_multiplier
 #         print('*tile threshold: ', thresh_tile)
         
-        # get cleaned image and run svd
+        # get cleaned image and run svd, iterate over all genes that are detected in this tile. 
         svd_tile = dict()  
         for j in range(len(codes[-1])):
+            # svd_tile_j is dictionary 
             svd_tile_j = processing.cleaned_img_svd(Xsub = Xsub, 
                                                     model = model2,   # this is the fine model using B_little
                                                     thre = thresh_tile, 
                                                     j = j, 
                                                     m = 5,
-                                                    tile_grab = tile.grab
+                                                    tile = tile
                                                    )
-            svd_tile[codes[-1][j]] = svd_tile_j     # returns the dictionary with J' (J':num of barcodes in this patch)
+            svd_tile[codes[-1][j]] = svd_tile_j     # returns the dictionary of dict with J' (J':num of barcodes in this patch)
         svd_list.append(svd_tile)
             
     # stitch it together as a sparse matrix

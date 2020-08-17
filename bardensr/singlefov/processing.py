@@ -100,11 +100,11 @@ def svd(loc_model, alpha,  Y_j, m):
     return dict(
         temporal = U_list,
         spatial = V_list,
-        r2 = r2_list
+        r2 = r2_list,
     )
     
 
-def cleaned_img_svd(Xsub, model, thre, j, tile_grab, m=5):  # for one/ patch. 
+def cleaned_img_svd(Xsub, model, thre, j, tile, m=5):  # for one/ patch. 
     '''
     output: 
         svd_tile_results - dictiorary of svd results, could be empty. 
@@ -128,19 +128,30 @@ def cleaned_img_svd(Xsub, model, thre, j, tile_grab, m=5):  # for one/ patch.
     Y_j = Xsub - Y_tilde    
     
     # detect blobs, get svd for each blob. 
-    Fs = model.F_scaled(blurred = True)
+    Fs = model.F_scaled(blurred = False)[tile.grab]
+    Fs_blurred = model.F_scaled(blurred = False)[tile.grab]
     loc_model = skimage.feature.peak_local_max(Fs[:,:,:,j],
                                                threshold_abs = thre,
                                                min_distance = 3, 
                                                exclude_border=False)
     loc_model = rm_edge_spots(target_j = loc_model.astype(int), 
-                              tile_grab = tile_grab,
+                              tile_grab = tile.grab,
                               m = m
                               ) 
-    if len(loc_model) >0:
-        single_imgs_list = [Fs[x[0]-m:x[0]+m, x[1]-m:x[1]+m, :, j] for x in loc_model]
-        svd_results = svd(loc_model = loc_model, alpha = np.array(model.alpha), Y_j = Y_j, m = m)        
+    if len(loc_model) >0:        
+        svd_results = svd(loc_model = loc_model, alpha = np.array(model.alpha), Y_j = Y_j, m = m)                
+        
+        single_imgs_list = [Fs_blurred[x[0]-m:x[0]+m, x[1]-m:x[1]+m, :, j] for x in loc_model]  # F original image (j, tile)         
         svd_results['imgs'] = single_imgs_list  # add the original Fs into the dict, each is (m1,m2,m3)
+        
+        coord = []
+        for x in loc_model:
+            coord_x = x[0] + tile.put[0].start
+            coord_y = x[1] + tile.put[1].start
+            coord_z = x[2] + tile.put[2].start            
+            coord.append(np.array((coord_x, coord_y, coord_z)))
+        
+        svd_results['coord'] = coord  # add the coordinates of this image. 
     else:
         svd_results = dict()
     return(svd_results)
