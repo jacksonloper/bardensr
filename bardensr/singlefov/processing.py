@@ -38,7 +38,7 @@ def downsample(X,n,axis=0):
 
 
 
-def rm_edge_spots(target_j, tile_grab, m = 0):  
+def rm_edge_spots(target_j, orig_shape, m = 0):  
     '''
     function remove edge spots. 
     target_j is (S, m1, m2, m3), 
@@ -47,12 +47,11 @@ def rm_edge_spots(target_j, tile_grab, m = 0):
     '''
     rm_id = []
     for s in range(target_j.shape[0]):  # flag indicates spots pass 
-        flag_1 = ((target_j[s][0] >= tile_grab[0].start + m) and (target_j[s][0] < tile_grab[0].stop - m))
-        flag_2 = ((target_j[s][1] >= tile_grab[1].start + m) and (target_j[s][1] < tile_grab[1].stop - m))
-        flag_3 = ((target_j[s][2] >= tile_grab[2].start) and (target_j[s][2] < tile_grab[2].stop))
-#         flag_3 = True
+        flag_1 = ((target_j[s][0] >= 0 + m) and (target_j[s][0] < orig_shape[0] - m))
+        flag_2 = ((target_j[s][1] >= 0 + m) and (target_j[s][1] < orig_shape[1] - m))
+        flag_3 = ((target_j[s][2] >= 0) and (target_j[s][2] < orig_shape[2]))
         if (flag_1 and flag_2 and flag_3) == False:
-            rm_id.append(s)
+            rm_id.append(s)            
     out = np.delete(target_j, rm_id, axis = 0)
     return(out)
 
@@ -109,7 +108,7 @@ def cleaned_img_svd(Xsub, model, thre, j, tile, m=5):  # for one/ patch.
     output: 
         svd_tile_results - dictiorary of svd results, could be empty. 
     input: 
-        Xsub - tile
+        Xsub - tile (look up)
         model - model_fine
         thre - tile threshold
         j - this barcode. 
@@ -125,32 +124,38 @@ def cleaned_img_svd(Xsub, model, thre, j, tile, m=5):  # for one/ patch.
     G_tilde = np.delete(np.array(model.frame_loadings()).reshape(N, -1), j, axis = -1)  # Nx(J-1)    
     Y_tilde = F_tilde @ G_tilde.T + np.array(model.a).reshape(M)[:, None]+ np.array(model.b).reshape(N)[None, :]
     Y_tilde = Y_tilde.reshape(M1, M2, M3, R, C)
-    Y_j = Xsub - Y_tilde    
+    Y_j = Xsub - Y_tilde    # this is the same size as lookup tile.   
     
     # detect blobs, get svd for each blob. 
-    Fs = model.F_scaled(blurred = False)[tile.grab]
-    Fs_blurred = model.F_scaled(blurred = False)[tile.grab]
-    loc_model = skimage.feature.peak_local_max(Fs[:,:,:,j],
+    Fs = model.F_scaled(blurred = False)[tile.grab]   # same size as look tile
+    Fs_blurred = model.F_scaled(blurred = True)[tile.grab] 
+    loc_model = skimage.feature.peak_local_max(Fs[:,:,:,j],  # finding the blobss in the look tile...
                                                threshold_abs = thre,
                                                min_distance = 3, 
                                                exclude_border=False)
     loc_model = rm_edge_spots(target_j = loc_model.astype(int), 
-                              tile_grab = tile.grab,
+                              orig_shape = Fs.shape,
                               m = m
                               ) 
+    
     if len(loc_model) >0:        
-        svd_results = svd(loc_model = loc_model, alpha = np.array(model.alpha), Y_j = Y_j, m = m)                
-        
-        single_imgs_list = [Fs_blurred[x[0]-m:x[0]+m, x[1]-m:x[1]+m, :, j] for x in loc_model]  # F original image (j, tile)         
-        svd_results['imgs'] = single_imgs_list  # add the original Fs into the dict, each is (m1,m2,m3)
-        
-        coord = []
+        svd_results = svd(loc_model = loc_model, alpha = np.array(model.alpha), Y_j = Y_j[tile.grab], m = m)                
+#         single_imgs_list = [Fs_blurred[x[0]-m:x[0]+m, x[1]-m:x[1]+m, :, j] for x in loc_model]  # F original image (j, tile)     
+
+        single_imgs_list = []
+        for x in loc_model:
+            single_imgs_list.append(Fs_blurred[x[0]-m:x[0]+m, x[1]-m:x[1]+m, :, j])
+            if single_imgs_list[-1].shape[0] != 2*m:
+                print(x, x[0]-m, x[0]+m, x[1]-m, x[1]+m)
+            if single_imgs_list[-1].shape[1] != 2*m:
+                print(x, x[0]-m, x[0]+m, x[1]-m, x[1]+m)            
+        svd_results['imgs'] = single_imgs_list  # add the original Fs into the dict, each is (m1,m2,m3)        
+        coord = []  # coords on the original fov scale
         for x in loc_model:
             coord_x = x[0] + tile.put[0].start
             coord_y = x[1] + tile.put[1].start
             coord_z = x[2] + tile.put[2].start            
-            coord.append(np.array((coord_x, coord_y, coord_z)))
-        
+            coord.append(np.array((coord_x, coord_y, coord_z)))        
         svd_results['coord'] = coord  # add the coordinates of this image. 
     else:
         svd_results = dict()
