@@ -140,15 +140,7 @@ def cleaned_img_svd(Xsub, model, thre, j, tile, m=5):  # for one/ patch.
     
     if len(loc_model) >0:        
         svd_results = svd(loc_model = loc_model, alpha = np.array(model.alpha), Y_j = Y_j[tile.grab], m = m)                
-#         single_imgs_list = [Fs_blurred[x[0]-m:x[0]+m, x[1]-m:x[1]+m, :, j] for x in loc_model]  # F original image (j, tile)     
-
-        single_imgs_list = []
-        for x in loc_model:
-            single_imgs_list.append(Fs_blurred[x[0]-m:x[0]+m, x[1]-m:x[1]+m, :, j])
-            if single_imgs_list[-1].shape[0] != 2*m:
-                print(x, x[0]-m, x[0]+m, x[1]-m, x[1]+m)
-            if single_imgs_list[-1].shape[1] != 2*m:
-                print(x, x[0]-m, x[0]+m, x[1]-m, x[1]+m)            
+        single_imgs_list = [Fs_blurred[x[0]-m:x[0]+m, x[1]-m:x[1]+m, :, j] for x in loc_model]  # F original image (j, tile)     
         svd_results['imgs'] = single_imgs_list  # add the original Fs into the dict, each is (m1,m2,m3)        
         coord = []  # coords on the original fov scale
         for x in loc_model:
