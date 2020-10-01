@@ -13,7 +13,7 @@ def heat_kernel(X,niter,axis=0):
     return X
 
 
-@tf.function(autograph=False)
+# @tf.function(autograph=False)
 def heat_kernel_nd(X,niters):
     for i in range(len(niters)):
         if niters[i]>0:
