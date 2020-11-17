@@ -36,7 +36,8 @@ class HeatKernel:
         if self.blur_level is None:
             return X
         else:
-            return kernels.heat_kernel_nd(X,list(self.blur_level))
+            bl=tuple([int(b) for b in self.blur_level])
+            return kernels.heat_kernel_nd(X,bl)
 
 class Model:
     def __init__(self,codebook,spatial_dims,blur_level=None,F=None,a=None,b=None,alpha=None,rho=None,varphi=None,
@@ -181,7 +182,6 @@ class Model:
             resid=tf.reduce_mean(resid,axis=0)
         self.b=tf.clip_by_value(resid,0,np.inf)  # R x C
 
-    @tf.function(autograph=False)
     def apply_Gamma(self,x,Gt,G):
         return (self.K @ (self.K @ (x@Gt))) @ G
 

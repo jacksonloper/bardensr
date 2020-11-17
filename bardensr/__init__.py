@@ -5,6 +5,9 @@ from . import kernels
 from . import diagnostics
 from . import singlefov
 from . import plotting
+from . import rectangles
+from . import memcheck
+from . import misc
 
 def ipydoc(x,saynm=True,strip4=True):
     import IPython.display

@@ -6,7 +6,7 @@ def plot_rbc(R,C,callback,sideways=False,notick=False,**kwargs):
         with AnimAcross(columns=R,**kwargs) as a:
             for c in range(C):
                 for r in range(R):
-                    ~a
+                    ~a 
                     if r==0:
                         plt.ylabel(f"Ch:{c}",fontsize=30)
                     if c==0:
@@ -14,7 +14,7 @@ def plot_rbc(R,C,callback,sideways=False,notick=False,**kwargs):
                     if notick:
                         plt.xticks([]); plt.yticks([]);
 
-                    callback(r,c)
+                    callback(r,c,a)
     else:
         with AnimAcross(columns=C,**kwargs) as a:
             for r in range(R):
@@ -27,8 +27,13 @@ def plot_rbc(R,C,callback,sideways=False,notick=False,**kwargs):
                     if notick:
                         plt.xticks([]); plt.yticks([]);
 
-                    callback(r,c)
+                    callback(r,c,a)
 
+
+def hexlbin(a,b,c=None,**kwargs):
+    if c is None:
+        c=np.ones(len(a))
+    plt.hexbin(a,b,c,reduce_C_function=lambda x:np.log(1+np.sum(x)),**kwargs)
 
 class AnimAcross:
     def __init__(self,ratio=.8,sz=4,columns=None,aa=None,asp=1.0):

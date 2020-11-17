@@ -4,7 +4,7 @@ This module is designed for handling an observation tensor $\mathbf{X}$ which ha
 - **TENSOR STRUCTURE:** The observations can be understood as a tensor $\mathbf{X} \in \mathbb{R}^{M_1 \times M_2 \times M_3 \times R \times C}$.
 - **NON-NEGATIVITY:** Each observation is non-negative (i.e. $\mathbf{X}_{m_1,m_2,m_3,r,c}\geq 0$)
 
-... and which can be modeled using the following *parameters*...
+... and which can be modeled using the following *variables*...
 - $\mathbf{B} \in \mathbb{R}^{R\times C\times J}$ is called the codebook
 - $\rho \in \mathbb{R}^C$ is called the phasing parameter
 - $\alpha \in \mathbb{R}^{R\times C}$ is called the gain
@@ -16,6 +16,7 @@ This module is designed for handling an observation tensor $\mathbf{X}$ which ha
 
 ... through the following *story*:
 
+1. There is a ground-truth density of amplicons of different types present in tissue.  This is given by $\mathbf{F}$.
 1. **PHASING:** The phasing parameter defines a tensor $\mathbf{Z}$ by letting $$\mathbf{Z}_{r,c,j} = \rho_c \mathbf{Z}_{r-1,c,j} + \mathbf{B}_{r,c,j}$$ for $r\geq 1$.  For $r=0$ we let $\mathbf{Z}_{0,c,j}=\mathbf{B}_{0,c,j}$.
 1. **GAIN AND COLOR-MIXING** The gain and color-mixing parameters then give rise the tensor $$\mathbf{G}_{r,c,j} = \alpha_{r,c} \sum_{c'} \varphi_{c,c'}Z_{r,c',j}$$
 1. **OBSERVATION MODEL** The observations $\mathbf{X}$ are approximately given by
@@ -86,15 +87,19 @@ def process(
     - unused_barcode_percentile_by_code=100
     - tqdm_notebook=True
 
-    Output: a sparse representation of where rolony densities are significant
-    - values  -- each entry represents the estimated density present at a particular place --
+    Output: a sparse representation of where rolony densities are significant.  This
+    representation is stored as a dictionary with the following components:
+
+    - values  -- each entry represents the estimated density present at a particular place with a particular gene --
     - m1   -- these represent the relevant m1 location
     - m2   -- these represent the relevant m2 location
     - m3   -- these represent the relevant m3 location
     - j -- these represent the relevant barcode
-    That is, for each i, we have that the density at position m1s[i],m2s[i],m3s[i]
-    corresponding to barcode bcds[i] has activity level vals[i].  The largest
-    barcode indices will correspond to the unused barcodes.
+
+    That is, for each index i, we have that the density at position m1[i],m2[i],m3[i]
+    corresponding to barcode j[i] has activity level vals[i].  Note
+    that there may be more genes than those specified in the original codebook,
+    since bardensr uses fake barcodes to find the correct thresholds.
 
     This algorithm proceeeds in two phases.
     - Phase I.  Downsample and learn F,alpha,varphi,rho,a,b on downsampled data.  This learning
