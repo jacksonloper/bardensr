@@ -3,19 +3,20 @@ from setuptools import setup
 setup(
     name='bardensr',
     author='Jackson Loper',
-    version='0.1',
+    version='0.2',
     include_package_data=True,
     description='barcode demixing through nonnegative spatial regression',
-    packages=['bardensr','bardensr.singlefov'],
+    packages=['bardensr','bardensr.singlefov','bardensr.benchmarks'],
     package_data={
-        '': ['*.pkl']
+        '': ['*.hdf5']
     },
     install_requires=[
-        'tensorflow >=2.1.0',
+        'tensorflow >=2.3.0',
         'scikit-image',
         'tqdm',
         'matplotlib',
         'scipy',
         'pandas',
+        'dataclasses',
     ]
 )

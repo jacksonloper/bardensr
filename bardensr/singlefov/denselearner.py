@@ -1,6 +1,7 @@
 import numpy as np
 import scipy as sp
 import scipy.ndimage
+import dataclasses
 
 import scipy.optimize
 import scipy.linalg
@@ -240,3 +241,87 @@ class Model:
 
     def update_rho(self,X):
         pass
+
+
+
+@tf.function(autograph=False)
+def gaussian_filter_3d(X,sigmas):
+    '''
+    X -- ... x M0 x M1 x M2
+    sigma -- tuple of length 3
+    '''
+
+    nd=len(X.shape)
+    X=gaussian_filter_1d(X,sigmas[0],nd-3)
+    X=gaussian_filter_1d(X,sigmas[1],nd-2)
+    X=gaussian_filter_1d(X,sigmas[2],nd-1)
+
+    return X
+
+def gaussian_filter_1d(X,sigma,axis):
+    '''
+    X -- tensor
+    sigma -- scalar
+    axis
+
+    filters X over axis
+    '''
+    xs=tf.cast(tf.range(-sigma*3+1,sigma*3+2),dtype=X.dtype)
+    filt=tf.math.exp(-.5*xs**2/(sigma*sigma))
+    filt=filt/tf.reduce_sum(filt)
+    filt=filt[:,None,None] # width x 1 x 1
+
+    # now we got to transpose X annoyingly
+
+    axes=list(range(len(X.shape)))
+    axes[-1],axes[axis]=axes[axis],axes[-1]
+
+    X_transposed=tf.transpose(X,axes) # everythingelse x axis x 1
+
+    newshp=(np.prod(X_transposed.shape[:-1]),X_transposed.shape[-1],1)
+    X_transposed_reshaped=tf.reshape(X_transposed,newshp)
+
+    X_convolved=tf.nn.conv1d(X_transposed_reshaped,filt,1,'SAME')
+    X_convolved_reshaped=tf.reshape(X_convolved,X_transposed.shape)
+
+    X_convolved_reshaped_transposed=tf.transpose(X_convolved_reshaped,axes)
+
+    return X_convolved_reshaped_transposed
+
+def doublenorm(X,lowg=1,sigma=5):
+    R,C,M0,M1,M2=X.shape
+
+    X=X/X.max()
+    X=np.reshape(X,(R*C,M0,M1,M2))
+    X_bl=gaussian_filter_3d(X,(sigma,sigma,sigma)).numpy().reshape(X.shape)
+
+    return (X/(lowg+X_bl)).reshape((R,C,M0,M1,M2))
+
+@dataclasses.dataclass
+class DensityResult:
+    density:np.ndarray
+    model:Model
+
+def build_density(Xsh,codebook,lam=.01,use_tqdm_notebook=False,niter=120,blur_level=1):
+    # Xsh -- R,C,M0,M1,M2
+    Xsh=Xsh/Xsh.max()
+
+    Xsh=tf.convert_to_tensor(np.transpose(Xsh,[2,3,4,0,1]))
+
+    m=Model(codebook,Xsh.shape[:3],lam=lam,blur_level=blur_level)
+
+    if use_tqdm_notebook:
+        import tqdm.notebook
+        t=tqdm.notebook.trange(niter)
+    else:
+        t=range(niter)
+    for i in t:
+        m.update_F(Xsh)
+        m.update_alpha(Xsh)
+        m.update_a(Xsh)
+        m.update_b(Xsh)
+
+    rez=m.F_scaled()
+    rez=rez/rez.max()
+
+    return DensityResult(density=rez,model=m)

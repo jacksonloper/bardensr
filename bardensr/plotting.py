@@ -1,12 +1,111 @@
 import matplotlib.pylab as plt
 import numpy as np
+from . import rectangles
+
+def focpt(m1,m2,bc,radius=10,j=None,**kwargs):
+    X=bc.X
+    R,C=X.shape[:2]
+
+    if j is not None:
+        code=bc.codebook[:,:,j]
+    else:
+        code=None
+
+    def go(r,c,a):
+
+        m1s=bc.rolonies['m1']-(m1-radius)
+        m2s=bc.rolonies['m2']-(m2-radius)
+        goodies = (m1s>=0)&(m2s>=0)&(m1s<radius*2)&(m2s<radius*2)
+        m1s=m1s[goodies]
+        m2s=m2s[goodies]
+        js=bc.rolonies['j'][goodies]
+        for (mm1,mm2,j) in zip(m1s,m2s,js):
+            if bc.codebook[r,c,j]:
+                plt.annotate(str(j),[mm2,mm1],color='white',
+                            bbox=dict(fc="k", ec="b", lw=2,alpha=.4))
+                plt.scatter([mm2],[mm1],color='red',marker='x')
+
+        if r==0 and c==0:
+            print(bc.rolonies[goodies].to_markdown())
+
+        sub=rectangles.sliceit0(X[r,c,0],[m1-radius,m2-radius],[m1+radius+1,m2+radius+1])
+        plt.imshow(sub)
+        plt.title(f'mx={int(sub.max())}')
+        if r==R-1:
+            plt.yticks([0,radius,radius*2],[str(m1-radius),str(m1),str(m1+radius)])
+            plt.gca().yaxis.tick_right()
+        else:
+            plt.yticks([])
+
+        if c==C-1:
+            plt.xticks([0,radius,radius*2],[str(m2-radius),str(m2),str(m2+radius)])
+        else:
+            plt.xticks([])
+
+
+        plt.axhline(radius,color='green')
+        plt.axvline(radius,color='green')
+
+        if (code is not None) and code[r,c]:
+            plt.axhline(radius,color='red')
+            plt.axvline(radius,color='red')
+
+    plot_rbc(R,C,go,**kwargs)
+
+def lutup(A,B,C,D,sc=.5,normeach=False):
+    A=A.copy()
+    B=B.copy()
+    C=C.copy()
+    D=D.copy()
+    if normeach:
+        for x in [A,B,C,D]:
+            x[:]=x[:]-np.min(x[:])
+            x[:]=x[:]/np.max(x[:])
+    else:
+        mn=np.inf
+        for x in [A,B,C,D]:
+            mn=np.min([mn,np.min(x)])
+        for x in [A,B,C,D]:
+            x[:]=x-mn
+        mx=-np.inf
+        for x in [A,B,C,D]:
+            mx=np.max([mx,np.max(x)])
+        for x in [A,B,C,D]:
+            x[:]=x/mx
+    colors=np.array([
+        [1,2,4],  # BLUE!
+        [1,4,2],  # GREEN!
+        [3,3,1],  # YELLOWY!
+        [4,2,1],  # RED!
+    ])*sc
+    rez=np.zeros(A.shape+(3,))
+    rez=rez+A[:,:,None]*colors[0][None,None,:]
+    rez=rez+B[:,:,None]*colors[1][None,None,:]
+    rez=rez+C[:,:,None]*colors[2][None,None,:]
+    rez=rez+D[:,:,None]*colors[3][None,None,:]
+    rez=np.clip(rez,0,1)
+    rez=(rez*255).astype(np.uint8)
+    return rez
+
+
+def gify(X,sc=.5,normeach=False):
+    import PIL
+    import io
+    imgs=[lutup(*x,sc=sc,normeach=normeach) for x in X]
+    imgs=[PIL.Image.fromarray(x) for x in imgs]
+    with io.BytesIO() as f:
+        imgs[0].save(f,save_all=True,append_images=imgs[1:],
+                duration=250,loop=0,format='gif')
+        f.seek(0)
+        s=f.read()
+    return s
 
 def plot_rbc(R,C,callback,sideways=False,notick=False,**kwargs):
     if sideways:
         with AnimAcross(columns=R,**kwargs) as a:
             for c in range(C):
                 for r in range(R):
-                    ~a 
+                    ~a
                     if r==0:
                         plt.ylabel(f"Ch:{c}",fontsize=30)
                     if c==0:
