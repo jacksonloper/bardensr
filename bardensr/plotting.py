@@ -1,9 +1,36 @@
 import matplotlib.pylab as plt
 import numpy as np
 from . import rectangles
+import io
 
-def focpt(m1,m2,bc,radius=10,j=None,**kwargs):
-    X=bc.X
+def savefig_PIL(format='png',bbox_inches='tight',**kwargs):
+    with io.BytesIO() as f:
+        plt.savefig(f,format=format,bbox_inches=bbox_inches,**kwargs)
+        f.seek(0)
+        s=f.read()
+    return s
+
+def bytes2PIL(s,**kwargs):
+    import PIL
+    with io.BytesIO() as f:
+        f.write(s)
+        f.seek(0)
+        img=PIL.Image.open(f,**kwargs).copy()
+    return img
+
+def gif_from_pngs(pngs,duration=250):
+    import PIL
+    imgs=[bytes2PIL(x) for x in pngs]
+    with io.BytesIO() as f:
+        imgs[0].save(f,save_all=True,append_images=imgs[1:],
+                duration=duration,loop=0,format='gif')
+        f.seek(0)
+        s=f.read()
+    return s
+
+def focpt(m1,m2,bc,radius=10,j=None,X=None,**kwargs):
+    if X is None:
+        X=bc.X
     R,C=X.shape[:2]
 
     if j is not None:
@@ -25,12 +52,12 @@ def focpt(m1,m2,bc,radius=10,j=None,**kwargs):
                             bbox=dict(fc="k", ec="b", lw=2,alpha=.4))
                 plt.scatter([mm2],[mm1],color='red',marker='x')
 
-        if r==0 and c==0:
-            print(bc.rolonies[goodies].to_markdown())
+        # if r==0 and c==0:
+        # print(bc.rolonies[goodies].to_markdown())
 
         sub=rectangles.sliceit0(X[r,c,0],[m1-radius,m2-radius],[m1+radius+1,m2+radius+1])
         plt.imshow(sub)
-        plt.title(f'mx={int(sub.max())}')
+        plt.title(f'mx={sub.max():.2f}')
         if r==R-1:
             plt.yticks([0,radius,radius*2],[str(m1-radius),str(m1),str(m1+radius)])
             plt.gca().yaxis.tick_right()

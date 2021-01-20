@@ -301,6 +301,7 @@ def doublenorm(X,lowg=1,sigma=5):
 class DensityResult:
     density:np.ndarray
     model:Model
+    X:np.ndarray
 
 def build_density(Xsh,codebook,lam=.01,use_tqdm_notebook=False,niter=120,blur_level=1):
     # Xsh -- R,C,M0,M1,M2
@@ -324,4 +325,4 @@ def build_density(Xsh,codebook,lam=.01,use_tqdm_notebook=False,niter=120,blur_le
     rez=m.F_scaled()
     rez=rez/rez.max()
 
-    return DensityResult(density=rez,model=m)
+    return DensityResult(density=rez,model=m,X=Xsh.numpy())
