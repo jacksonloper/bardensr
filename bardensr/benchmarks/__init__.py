@@ -32,6 +32,9 @@ class BarcodeFPFNResult:
     dr:float
     barcode_pairing:pd.DataFrame
 
+    def __repr__(self):
+        return f'barcode comparison, fdr={self.fdr},dr={self.dr}'
+
 def codebook_comparison(codebook,other_codebook,tolerated_error=0,strict=False):
     '''
     Attempt to match each code in codebook with a code in other_codebook,
@@ -44,8 +47,12 @@ def codebook_comparison(codebook,other_codebook,tolerated_error=0,strict=False):
     R,C,J=codebook.shape
 
 
-    diffs = codebook[:,:,:,None]!=other_codebook[:,:,None,:]
-    if not strict:
+    codebook=codebook.astype(np.float)
+    other_codebook=other_codebook.astype(np.float)
+    diffs = np.abs(codebook[:,:,:,None]-other_codebook[:,:,None,:])
+    if strict:
+        diffs[np.isnan(diffs)]=1
+    else:
         diffs[np.isnan(diffs)]=0
     dsts = np.sum(diffs,axis=(0,1)) # J1 x J2
 
