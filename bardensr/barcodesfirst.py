@@ -52,6 +52,12 @@ def _peak_call(densities,poolsize,thresh):
     return locs
 
 def peak_call(densities,poolsize,thresh):
+    '''
+    Input
+    - densities, M0 x M1 x M2 x J
+    - poolsize, tuple of ints
+    - thresh, scalar
+    '''
     thresh=tf.convert_to_tensor(thresh,dtype=tf.float32)
     densities=tf.convert_to_tensor(densities,dtype=tf.float32)
     locs=_peak_call(densities,poolsize,thresh).numpy()

@@ -14,7 +14,7 @@ def _locs_and_j_to_df(locs,j):
     ))
 
 @dataclasses.dataclass
-class FPFNResult:
+class RolonyFPFNResult:
     fn:int
     fp:int
     fn_indices:np.array
@@ -22,6 +22,55 @@ class FPFNResult:
     fn_rolonies:pd.DataFrame
     fp_rolonies:pd.DataFrame
     agreement_rolonies:pd.DataFrame
+
+
+@dataclasses.dataclass
+class BarcodeFPFNResult:
+    fn:int
+    fp:int
+    fdr:float
+    dr:float
+    barcode_pairing:pd.DataFrame
+
+def codebook_comparison(codebook,other_codebook,tolerated_error=0,strict=False):
+    '''
+    Attempt to match each code in codebook with a code in other_codebook,
+    up to a tolerated error level.
+
+    If strict=False and the entries of a barcode has nans in it,
+    we don't consider disagreements there to be errors (just missingness).
+    '''
+
+    R,C,J=codebook.shape
+
+
+    diffs = codebook[:,:,:,None]!=other_codebook[:,:,None,:]
+    if not strict:
+        diffs[np.isnan(diffs)]=0
+    dsts = np.sum(diffs,axis=(0,1)) # J1 x J2
+
+    fp=np.sum(np.min(dsts,axis=0)>tolerated_error) # FP = none of our barcodes are within tolerated error of theirs
+    fn=np.sum(np.min(dsts,axis=1)>tolerated_error) # FN = none of their barcodes are within tolerated error of ours
+
+    fdr=fp/other_codebook.shape[-1]
+    dr=1.0 - (fn/codebook.shape[-1])
+
+    # get a pairing -- for each of entries in the codebook, find (at least one!) entry in other_codebook
+    idx1=[]
+    idx2=[]
+    for i in range(dsts.shape[0]):
+        best=np.argmin(dsts[i])
+        if dsts[i,best]<=tolerated_error:
+            idx1.append(i)
+            idx2.append(best)
+
+    barcode_pairing=pd.DataFrame(dict(
+        idx1=idx1,
+        idx2=idx2
+    ))
+
+    return BarcodeFPFNResult(fn,fp,fdr,dr,barcode_pairing)
+
 
 def downsample1(x,ds,axis=0):
     newshape=np.array(x.shape,dtype=np.int)
@@ -120,13 +169,15 @@ class Benchmark:
             rolonies
         )
 
-    def fpfn(self,df,radius,good_subset=None):
+
+
+    def rolony_fpfn(self,df,radius,good_subset=None):
         if len(df)==0:
             noro=_locs_and_j_to_df(
                 np.zeros((0,3),dtype=np.int),
                 np.zeros(0,dtype=np.int),
             ),
-            return FPFNResult(
+            return RolonyFPFNResult(
                 fn=self.n_spots,
                 fp=0,
                 fn_indices=np.zeros(0,dtype=np.int),
@@ -174,7 +225,7 @@ class Benchmark:
         fantasized_bad=dists_from_them_to_closest_in_me_that_isnt_bad>radius
         spots_they_made_up=np.sum(fantasized_bad)
 
-        return FPFNResult(
+        return RolonyFPFNResult(
             fn=spots_they_missed,
             fp=spots_they_made_up,
             fn_indices=np.where(goodies)[0][missing_goodies], # fn_indices[3] says which benchmark spot we failed at
