@@ -124,12 +124,12 @@ def exhaustively_sample_mesh_interior(mesh,pitch):
         mesh: watertight trimesh.Trimesh object
         pitch: approximation level to use in sampling (lengthscale used for voxelation)
     output:
-        locations: all voxel locations insite the mesh
+        locations: all voxel locations inside the mesh
     '''
     MX=pitch*(1+np.max(mesh.vertices,axis=0)//pitch)
     MN=pitch*(np.min(mesh.vertices,axis=0)//pitch)
     vv =voxelize(mesh,pitch,maxs=MX,mins=MN)
-    opts=np.array(np.where(vv))
+    opts=np.array(np.where(vv)).T
     opts=opts*pitch+np.array(MN)
     return opts
 
@@ -152,7 +152,7 @@ def sample_meshlist_interiors(submeshes,pitch = 100, poisrate=1e-8,num_workers=1
         if use_tqdm_notebook:
             t=tqdm.notebook.tqdm(t)
         if poisrate==np.inf:
-            jobs=[ex.submit(exhautively_sample_mesh_interior,mesh, pitch) for mesh in submeshes]
+            jobs=[ex.submit(exhaustively_sample_mesh_interior,mesh, pitch) for mesh in submeshes]
         else:
             jobs=[ex.submit(sample_mesh_interior,mesh,poisrate, pitch) for mesh in submeshes]
         for idx in t:

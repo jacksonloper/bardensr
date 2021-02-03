@@ -3,6 +3,8 @@ import numpy as np
 from . import rectangles
 import io
 
+from mpl_toolkits.mplot3d import Axes3D
+
 def savefig_PIL(format='png',bbox_inches='tight',**kwargs):
     with io.BytesIO() as f:
         plt.savefig(f,format=format,bbox_inches=bbox_inches,**kwargs)
