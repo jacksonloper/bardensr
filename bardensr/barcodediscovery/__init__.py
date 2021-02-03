@@ -451,9 +451,6 @@ def seek_barcodes_vectorized(X,
         datasq=np.sum(patches_limited**2,axis=(1,2,3,4))
     ndp=dot/np.sqrt(reconsq*datasq)
 
-    
-
-
     # get rid of bad guys again
     bad=ndp < r2_thre
     n_good_rounds=n_good_rounds[~bad]

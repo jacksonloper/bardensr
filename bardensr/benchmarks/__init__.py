@@ -33,7 +33,7 @@ class BarcodeFPFNResult:
     barcode_pairing:pd.DataFrame
 
     def __repr__(self):
-        return f'barcode comparison, fdr={self.fdr},dr={self.dr}'
+        return f'[barcode comparison: fdr={self.fdr*100:.1f}%, dr={self.dr*100:.1f}%]'
 
 def codebook_comparison(codebook,other_codebook,tolerated_error=0,strict=False):
     '''
