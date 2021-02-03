@@ -6,7 +6,8 @@ setup(
     version='0.2',
     include_package_data=True,
     description='barcode demixing through nonnegative spatial regression',
-    packages=['bardensr','bardensr.singlefov','bardensr.benchmarks','bardensr.barcodediscovery'],
+    packages=['bardensr','bardensr.singlefov','bardensr.benchmarks',
+                'bardensr.barcodediscovery','bardensr.meshes'],
     package_data={
         '': ['*.hdf5']
     },

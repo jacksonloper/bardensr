@@ -13,6 +13,13 @@ def match_onehot(codebook,s):
             good=good&codebook[r,c,:]
     return np.where(good)[-1]
 
+def maybe_trange(n,use_tqdm_notebook):
+    if use_tqdm_notebook:
+        import tqdm.notebook
+        return tqdm.notebook.trange(n)
+    else:
+        return range(n)
+
 def convert_codebook_to_onehot_form(codebook):
     '''
     Input: codebook, JxR
@@ -21,5 +28,6 @@ def convert_codebook_to_onehot_form(codebook):
     J,R=codebook.shape
     C=codebook.max()+1
     codes=np.eye(C,dtype=np.bool)
+    codes=np.concatenate([codes,np.full((1,C),np.nan)],axis=0)
     codebook=codes[codebook.ravel()].reshape((J,R,C))
     return np.transpose(codebook,[1,2,0])

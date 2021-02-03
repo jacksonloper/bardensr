@@ -35,6 +35,12 @@ class BarcodeFPFNResult:
     def __repr__(self):
         return f'[barcode comparison: fdr={self.fdr*100:.1f}%, dr={self.dr*100:.1f}%]'
 
+    def book1_matches(self,idx1):
+        return np.array(self.barcode_pairing[self.barcode_pairing['idx1']==idx1]['idx2'])
+
+    def book2_matches(self,idx2):
+        return np.array(self.barcode_pairing[self.barcode_pairing['idx2']==idx2]['idx1'])
+
 def codebook_comparison(codebook,other_codebook,tolerated_error=0,strict=False):
     '''
     Attempt to match each code in codebook with a code in other_codebook,
@@ -113,6 +119,10 @@ class Benchmark:
     def __post_init__(self):
         self.n_spots=len(self.rolonies)
         self.n_genes=self.codebook.shape[-1]
+        if 'status' not in self.rolonies:
+            self.rolonies['status']=np.full(len(self.rolonies),'good',dtype='S40')
+        if 'remarks' not in self.rolonies:
+            self.rolonies['remarks']=np.full(len(self.rolonies),'',dtype='S40')
         self.n_good_spots=np.sum(self.rolonies['status']=='good')
 
     def downsample(self,dsd):

@@ -10,6 +10,22 @@ def savefig_PIL(format='png',bbox_inches='tight',**kwargs):
         s=f.read()
     return s
 
+def plotmesh(mesh,**kwargs):
+    fig=plt.gcf()
+    ax = fig.gca(projection='3d')
+    ax.plot_trisurf(*mesh.vertices.T,triangles=mesh.faces,linewidth=0.2, antialiased=True,
+                    **kwargs)
+
+    X,Y,Z=mesh.vertices.T
+    max_range = np.array([X.max()-X.min(), Y.max()-Y.min(), Z.max()-Z.min()]).max()
+    Xb = 0.5*max_range*np.mgrid[-1:2:2,-1:2:2,-1:2:2][0].flatten() + 0.5*(X.max()+X.min())
+    Yb = 0.5*max_range*np.mgrid[-1:2:2,-1:2:2,-1:2:2][1].flatten() + 0.5*(Y.max()+Y.min())
+    Zb = 0.5*max_range*np.mgrid[-1:2:2,-1:2:2,-1:2:2][2].flatten() + 0.5*(Z.max()+Z.min())
+
+    for xb, yb, zb in zip(Xb, Yb, Zb):
+       ax.plot([xb], [yb], [zb], 'w')
+
+
 def bytes2PIL(s,**kwargs):
     import PIL
     with io.BytesIO() as f:
@@ -176,6 +192,14 @@ class AnimAcross:
             return self.aa
         else:
             return self
+
+    def __pos__(self):
+        self.axes_list.append(
+        plt.gcf().add_axes(
+            [0,0,self.ratio,self.ratio],
+            label="axis%d"%len(self.axes_list),
+            projection='3d',
+        ))
 
     def __invert__(self):
         self.axes_list.append(plt.gcf().add_axes([0,0,self.ratio,self.ratio],label="axis%d"%len(self.axes_list)))
