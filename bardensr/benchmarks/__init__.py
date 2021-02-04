@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import scipy as sp
 import scipy.spatial
+from typing import Optional
+
 
 def _locs_and_j_to_df(locs,j):
     return pd.DataFrame(dict(
@@ -115,15 +117,18 @@ class Benchmark:
     X: np.array
     codebook: np.array
     rolonies: pd.DataFrame
+    GT_voxels: Optional[list] = None  # list of length J. 
 
     def __post_init__(self):
         self.n_spots=len(self.rolonies)
         self.n_genes=self.codebook.shape[-1]
         if 'status' not in self.rolonies:
-            self.rolonies['status']=np.full(len(self.rolonies),'good',dtype='S40')
+            self.rolonies['status']=np.full(len(self.rolonies),'good',dtype='U40')
         if 'remarks' not in self.rolonies:
-            self.rolonies['remarks']=np.full(len(self.rolonies),'',dtype='S40')
+            self.rolonies['remarks']=np.full(len(self.rolonies),'',dtype='U40')
         self.n_good_spots=np.sum(self.rolonies['status']=='good')
+        if type(self.GT_voxels) == type(None):
+            self.GT_voxels = pd.DataFrame(data = [], columns = ['j','m0','m1','m2'])
 
     def downsample(self,dsd):
         R,C=self.codebook.shape[:2]
@@ -159,7 +164,7 @@ class Benchmark:
             for nm in ['description','name','version']:
                 f.attrs[nm]=getattr(self,nm)
             f.create_dataset('X',data=self.X)
-            f.create_dataset('codebook',data=self.codebook)
+            f.create_dataset('codebook',data=self.codebook)            
             f.create_group('rolonies')
             for nm in ['j','m0','m1','m2']:
                 ds=np.array(self.rolonies[nm]).astype(np.int)
@@ -167,6 +172,10 @@ class Benchmark:
             for nm in ['remarks','status']:
                 ds=np.array(self.rolonies[nm]).astype("S")
                 f.create_dataset('rolonies/'+nm,data=ds)
+            f.create_group('GT_voxels')
+            for nm in ['j','m0','m1','m2']:
+                ds=np.array(self.GT_voxels[nm]).astype(np.int)
+                f.create_dataset('GT_voxels/'+nm,data=ds)
 
     def create_new_benchmark_with_more_rolonies(self,df):
         df=df.copy()
@@ -282,7 +291,7 @@ def load_h5py(fn):
         for nm in ['description','name','version']:
             dct[nm]=f.attrs[nm]
         dct['X']=f['X'][:]
-        dct['codebook']=f['codebook'][:]
+        dct['codebook']=f['codebook'][:]        
 
         rn={}
         for nm in ['j','m0','m1','m2']:
@@ -290,6 +299,11 @@ def load_h5py(fn):
         for nm in ['remarks','status']:
             rn[nm]=f['rolonies/'+nm][:].astype('U')
         dct['rolonies']=pd.DataFrame(rn)
+        
+        rn={}
+        for nm in ['j','m0','m1','m2']:
+            rn[nm]=f['GT_voxels/'+nm][:].astype(np.int)
+        dct['GT_voxels']=pd.DataFrame(rn)
     bc=Benchmark(**dct)
     bc.source_fn=fn
     return bc
