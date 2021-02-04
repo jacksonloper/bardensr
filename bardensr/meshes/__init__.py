@@ -133,6 +133,7 @@ def exhaustively_sample_mesh_interior(mesh,pitch):
     opts=opts*pitch+np.array(MN)
     return opts
 
+
 def sample_meshlist_interiors(submeshes,pitch = 100, poisrate=1e-8,num_workers=1,
                             use_tqdm_notebook=True):
     '''
