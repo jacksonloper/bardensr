@@ -5,7 +5,7 @@ import pandas as pd
 import scipy as sp
 import scipy.spatial
 from typing import Optional
-
+import tqdm
 
 def _locs_and_j_to_df(locs,j):
     return pd.DataFrame(dict(
@@ -73,7 +73,7 @@ def codebook_comparison(codebook,other_codebook,tolerated_error=0,strict=False):
     # get a pairing -- for each of entries in the codebook, find (at least one!) entry in other_codebook
     idx1=[]
     idx2=[]
-    for i in range(dsts.shape[0]):
+    for i in range(dsts.shape[0]):  # == range(J1)
         best=np.argmin(dsts[i])
         if dsts[i,best]<=tolerated_error:
             idx1.append(i)
@@ -85,6 +85,60 @@ def codebook_comparison(codebook,other_codebook,tolerated_error=0,strict=False):
     ))
 
     return BarcodeFPFNResult(fn,fp,fdr,dr,barcode_pairing)
+
+
+
+
+def get_smoothdorff(J,      # want to remove this               
+                    spots, 
+                    GT_vox, 
+                    fpfn,   # want to remove this. 
+                    max_dis = np.nan):
+    '''
+    compute smoothdorff between detected spots (`spots`) and v (`GT_vox`)
+    input: both pandas dataframe, with column names ['m0, m1, m2, j']
+        spots: pd.DataFrame, from bardensr.barcodesfirst.peak_call with size of (S, 4) 
+        GT_vox: bench.GT_voxels, pd.DataFrame        
+        (u can be empty in which case it returns the max_dis.)
+    output: a list of smoothdorff values, 
+    '''
+    smtdf = np.zeros(J)
+    for idx1 in tqdm.tqdm_notebook(range(J)):  # GT 
+        idx2=fpfn.book1_matches(idx1)   # discovered spots. 
+        if len(idx2) != 0:
+            assert(len(idx2) == 1)
+            idx2 = idx2[0]
+            v = np.array(GT_vox[GT_vox['j']==idx1][['m0','m1','m2']])
+            u = np.array(spots[spots['j']==idx2][['m0','m1','m2']]) 
+            smtdf[idx1] = smoothdorff(u, v, max_dis = 100)            
+        else:   # len(idx2) == 0, meaning theres no corresponding barcode discovered for this idx2. 
+            smtdf[idx1] = np.nan # max_dis
+    return(smtdf)
+
+    
+    
+def smoothdorff(u, v, max_dis = np.nan):
+    '''
+    compute smoothdorff between u and v
+    input:
+        u/v: both numpy array (S, 2) or (S, 3) (check??)
+        Note v should be GT and cannot be empty.
+        u can be empty in which case return the max_dis.
+    output: a scalar. smaller, closer the predicted to the GT is.
+    '''
+    assert(v.shape[0] > 0)
+    if (u.shape[0] == 0):
+        return(max_dis)  # empty set for the detected spots --> bad!
+    else:
+        kdtree_u  = sp.spatial.KDTree(u.astype(float))
+        kdtree_v  = sp.spatial.KDTree(v.astype(float))
+        sdm = kdtree_u.sparse_distance_matrix(kdtree_v, max_dis)
+        sdm_csr = sdm.tocsr()  # S_v x S_u in dense
+        min0 = sdm_csr.min(axis = 0).astype(float)
+        min1 = sdm_csr.min(axis = 1).astype(float)
+        out = max(min0.todense().mean(), min1.todense().mean())
+        return(out)
+
 
 
 def downsample1(x,ds,axis=0):
