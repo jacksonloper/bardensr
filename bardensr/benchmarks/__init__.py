@@ -92,7 +92,7 @@ def codebook_comparison(codebook,other_codebook,tolerated_error=0,strict=False):
 def get_smoothdorff(bench,
                     spots, 
                     map_idx1to2,   # mapping
-                    max_dis = np.nan):
+                    max_dis = np.inf):
     '''
     compute smoothdorff between detected spots (`spots`) and v (`GT_vox`)
     input: both pandas dataframe, with column names ['m0, m1, m2, j']
@@ -101,24 +101,24 @@ def get_smoothdorff(bench,
         (u can be empty in which case it returns the max_dis.)
     output: a list of smoothdorff values, 
     '''
-    J = bench.codebook.shape[-1]
     GT_vox = bench.GT_voxels
-    smtdf = np.zeros(J)
-    for idx1 in tqdm.tqdm_notebook(range(J)):  # GT 
+    smtdf = dict()
+    for idx1 in tqdm.tqdm_notebook(np.unique(np.array(bench.rolonies['j']))):  # GT 
         idx2 = map_idx1to2[idx1]   # discovered spots. 
-        if len(idx2) != 0:
+        if len(idx2) != 0:  # found at least one corresponding barcode. 
             assert(len(idx2) == 1)
             idx2 = idx2[0]
             v = np.array(GT_vox[GT_vox['j']==idx1][['m0','m1','m2']])
+            assert(v.shape[0] > 0)
             u = np.array(spots[spots['j']==idx2][['m0','m1','m2']]) 
-            smtdf[idx1] = smoothdorff(u, v, max_dis = max_dis)            
+            smtdf[idx1] = smoothdorff(u, v, max_dis = max_dis)
         else:   # len(idx2) == 0, meaning theres no corresponding barcode discovered for this idx2. 
-            smtdf[idx1] = np.nan # max_dis
+            smtdf[idx1] = np.inf # max_dis
     return(smtdf)
 
     
     
-def smoothdorff(u, v, max_dis = np.nan):
+def smoothdorff(u, v, max_dis):
     '''
     compute smoothdorff between u and v
     input:
@@ -127,18 +127,15 @@ def smoothdorff(u, v, max_dis = np.nan):
         u can be empty in which case return the max_dis.
     output: a scalar. smaller, closer the predicted to the GT is.
     '''
-    if (v.shape[0] == 0):
-        out = 0 if u.shape[0] == 0 else max_dis
-        return(out)
-    if (u.shape[0] == 0):  # we just failed to find this axon. 
+#     if (v.shape[0] == 0):
+#         out = 0 if u.shape[0] == 0 else max_dis
+#         return(out)
+    if (u.shape[0] == 0):  # we just failed to find the spots for this axon. 
         return(max_dis)  # empty set for the detected spots --> bad!
     else:
         kdtree_u  = sp.spatial.KDTree(u.astype(float))
         kdtree_v  = sp.spatial.KDTree(v.astype(float))
-        if np.isnan(max_dis):
-            sdm = kdtree_u.sparse_distance_matrix(kdtree_v, np.inf)
-        else:
-            sdm = kdtree_u.sparse_distance_matrix(kdtree_v, max_dis)
+        sdm = kdtree_u.sparse_distance_matrix(kdtree_v, max_dis)
         sdm_csr = sdm.tocsr()  # S_v x S_u in dense
         min0 = sdm_csr.min(axis = 0).astype(float)
         min1 = sdm_csr.min(axis = 1).astype(float)
