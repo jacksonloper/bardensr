@@ -1,6 +1,7 @@
 import h5py
 import dataclasses
 import numpy as np
+import collections
 import pandas as pd
 import scipy as sp
 import scipy.spatial
@@ -27,21 +28,29 @@ class RolonyFPFNResult:
 
 
 @dataclasses.dataclass
+class BarcodePairing:
+    pairing_list:np.array
+
+    def __post_init__(self):
+        self.book1_lookup=collections.defaultdict(set)
+        self.book2_lookup=collections.defaultdict(set)
+        for i,j in self.pairing_list:
+            self.book1_lookup[i].add(j)
+            self.book2_lookup[j].add(i)
+
+        self.book1_maps_unambiguously = (np.max([len(self.book1_lookup[j]) for j in self.book1_lookup])<=1)
+        self.book2_maps_unambiguously = (np.max([len(self.book2_lookup[j]) for j in self.book2_lookup])<=1)
+
+@dataclasses.dataclass
 class BarcodeFPFNResult:
     fn:int
     fp:int
     fdr:float
     dr:float
-    barcode_pairing:pd.DataFrame
+    barcode_pairing:BarcodePairing
 
     def __repr__(self):
         return f'[barcode comparison: fdr={self.fdr*100:.1f}%, dr={self.dr*100:.1f}%]'
-
-    def book1_matches(self,idx1):
-        return np.array(self.barcode_pairing[self.barcode_pairing['idx1']==idx1]['idx2'])
-
-    def book2_matches(self,idx2):
-        return np.array(self.barcode_pairing[self.barcode_pairing['idx2']==idx2]['idx1'])
 
 def codebook_comparison(codebook,other_codebook,tolerated_error=0,strict=False):
     '''
@@ -79,65 +88,34 @@ def codebook_comparison(codebook,other_codebook,tolerated_error=0,strict=False):
             idx1.append(i)
             idx2.append(best)
 
-    barcode_pairing=pd.DataFrame(dict(
-        idx1=idx1,
-        idx2=idx2
-    ))
+    barcode_pairing=BarcodePairing(np.c_[idx1,idx2])
 
     return BarcodeFPFNResult(fn,fp,fdr,dr,barcode_pairing)
 
-
-
-
-def get_smoothdorff(J,      # want to remove this               
-                    spots, 
-                    GT_vox, 
-                    fpfn,   # want to remove this. 
-                    max_dis = np.nan):
+def meanmin_divergence(u,v):
     '''
-    compute smoothdorff between detected spots (`spots`) and v (`GT_vox`)
-    input: both pandas dataframe, with column names ['m0, m1, m2, j']
-        spots: pd.DataFrame, from bardensr.barcodesfirst.peak_call with size of (S, 4) 
-        GT_vox: bench.GT_voxels, pd.DataFrame        
-        (u can be empty in which case it returns the max_dis.)
-    output: a list of smoothdorff values, 
-    '''
-    smtdf = np.zeros(J)
-    for idx1 in tqdm.tqdm_notebook(range(J)):  # GT 
-        idx2=fpfn.book1_matches(idx1)   # discovered spots. 
-        if len(idx2) != 0:
-            assert(len(idx2) == 1)
-            idx2 = idx2[0]
-            v = np.array(GT_vox[GT_vox['j']==idx1][['m0','m1','m2']])
-            u = np.array(spots[spots['j']==idx2][['m0','m1','m2']]) 
-            smtdf[idx1] = smoothdorff(u, v, max_dis = 100)            
-        else:   # len(idx2) == 0, meaning theres no corresponding barcode discovered for this idx2. 
-            smtdf[idx1] = np.nan # max_dis
-    return(smtdf)
+    Input
+    - u, (NxD) matrix
+    - v, (MxD) matrix
 
-    
-    
-def smoothdorff(u, v, max_dis = np.nan):
+    Output:
+
+        meanmin(u<v) = mean_i min_j |u[i]-v[j]|
+
+    If u is a subset of v, meanmin=0
+
+    Is u is nontrivial and v is empty, minmin = inf
     '''
-    compute smoothdorff between u and v
-    input:
-        u/v: both numpy array (S, 2) or (S, 3) (check??)
-        Note v should be GT and cannot be empty.
-        u can be empty in which case return the max_dis.
-    output: a scalar. smaller, closer the predicted to the GT is.
-    '''
-    assert(v.shape[0] > 0)
-    if (u.shape[0] == 0):
-        return(max_dis)  # empty set for the detected spots --> bad!
+
+    if len(u)==0: # then, by definition, l1 is a subset of l2
+        return 0.0
+    elif len(v)==0: # there's stuff in l1, but NOTHING in l2
+        return np.inf
     else:
-        kdtree_u  = sp.spatial.KDTree(u.astype(float))
-        kdtree_v  = sp.spatial.KDTree(v.astype(float))
-        sdm = kdtree_u.sparse_distance_matrix(kdtree_v, max_dis)
-        sdm_csr = sdm.tocsr()  # S_v x S_u in dense
-        min0 = sdm_csr.min(axis = 0).astype(float)
-        min1 = sdm_csr.min(axis = 1).astype(float)
-        out = max(min0.todense().mean(), min1.todense().mean())
-        return(out)
+        import sklearn.neighbors
+        X=sklearn.neighbors.BallTree(u)
+        dists=X.query(v,k=1,return_distance=True)
+        return np.mean(dists)
 
 
 
@@ -171,7 +149,7 @@ class Benchmark:
     X: np.array
     codebook: np.array
     rolonies: pd.DataFrame
-    GT_voxels: Optional[list] = None  # list of length J. 
+    GT_voxels: Optional[list] = None  # list of length J.
 
     def __post_init__(self):
         self.n_spots=len(self.rolonies)
@@ -218,7 +196,7 @@ class Benchmark:
             for nm in ['description','name','version']:
                 f.attrs[nm]=getattr(self,nm)
             f.create_dataset('X',data=self.X)
-            f.create_dataset('codebook',data=self.codebook)            
+            f.create_dataset('codebook',data=self.codebook)
             f.create_group('rolonies')
             for nm in ['j','m0','m1','m2']:
                 ds=np.array(self.rolonies[nm]).astype(np.int)
@@ -249,7 +227,42 @@ class Benchmark:
             rolonies
         )
 
+    def voxel_meanmin_divergences(self,df,barcode_pairing=None):
+        '''
+        Input:
+        - df, a dataframe of rolonies
+        - [optional] barcode_pairing, matching (js from self.rolonies) <--> (js from df)
 
+        Output:
+        - us_c_them_errors -- for each j, the failure of our voxels to be a subset of their voxels
+        - them_c_us_errors -- for each j, the failure of their voxels to be a subset of our voxels
+        - unmatched_barcodes -- for each j, whether that barcode was simply absent from the barcode pairing
+        '''
+
+        us_c_them_errors=np.zeros(self.n_genes)
+        them_c_us_errors=np.zeros(self.n_genes)
+
+        if barcode_pairing is not None:
+            assert barcode_pairing.book2_maps_unambiguously,"some of the df barcodes are mapped to more than one of our barcodes!"
+
+        for j in range(self.n_genes):
+            l1=self.rolonies[self.rolonies['j']==j][['m0','m1','m2']]
+
+            if barcode_pairing is not None:
+                l2=df[df['j'].isin(barcode_pairing.book1_lookup[j])][['m0','m1','m2']]
+            else:
+                l2=df[df['j']==j][['m0','m1','m2']]
+
+            us_c_them_errors[j]=meanmin_divergence(l1,l2)
+            them_c_us_errors[j]=meanmin_divergence(l2,l1)
+
+        unmatched_barcodes=np.zeros(self.n_genes,dtype=np.bool)
+        if barcode_pairing is not None:
+            for j in range(self.n_genes):
+                if len(barcode_pairing.book1_lookup[j])==0:
+                    unmatched_barcodes[j]=True
+
+        return us_c_them_errors,them_c_us_errors,unmatched_barcodes
 
     def rolony_fpfn(self,df,radius,good_subset=None):
         if len(df)==0:
@@ -345,7 +358,7 @@ def load_h5py(fn):
         for nm in ['description','name','version']:
             dct[nm]=f.attrs[nm]
         dct['X']=f['X'][:]
-        dct['codebook']=f['codebook'][:]        
+        dct['codebook']=f['codebook'][:]
 
         rn={}
         for nm in ['j','m0','m1','m2']:
@@ -353,7 +366,7 @@ def load_h5py(fn):
         for nm in ['remarks','status']:
             rn[nm]=f['rolonies/'+nm][:].astype('U')
         dct['rolonies']=pd.DataFrame(rn)
-        
+
         rn={}
         for nm in ['j','m0','m1','m2']:
             rn[nm]=f['GT_voxels/'+nm][:].astype(np.int)
