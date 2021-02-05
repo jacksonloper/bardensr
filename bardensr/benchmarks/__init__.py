@@ -1,11 +1,12 @@
 import h5py
 import dataclasses
 import numpy as np
+import collections
 import pandas as pd
 import scipy as sp
 import scipy.spatial
 from typing import Optional
-
+import tqdm
 
 def _locs_and_j_to_df(locs,j):
     return pd.DataFrame(dict(
@@ -27,21 +28,29 @@ class RolonyFPFNResult:
 
 
 @dataclasses.dataclass
+class BarcodePairing:
+    pairing_list:np.array
+
+    def __post_init__(self):
+        self.book1_lookup=collections.defaultdict(set)
+        self.book2_lookup=collections.defaultdict(set)
+        for i,j in self.pairing_list:
+            self.book1_lookup[i].add(j)
+            self.book2_lookup[j].add(i)
+
+        self.book1_maps_unambiguously = (np.max([len(self.book1_lookup[j]) for j in self.book1_lookup])<=1)
+        self.book2_maps_unambiguously = (np.max([len(self.book2_lookup[j]) for j in self.book2_lookup])<=1)
+
+@dataclasses.dataclass
 class BarcodeFPFNResult:
     fn:int
     fp:int
     fdr:float
     dr:float
-    barcode_pairing:pd.DataFrame
+    barcode_pairing:BarcodePairing
 
     def __repr__(self):
         return f'[barcode comparison: fdr={self.fdr*100:.1f}%, dr={self.dr*100:.1f}%]'
-
-    def book1_matches(self,idx1):
-        return np.array(self.barcode_pairing[self.barcode_pairing['idx1']==idx1]['idx2'])
-
-    def book2_matches(self,idx2):
-        return np.array(self.barcode_pairing[self.barcode_pairing['idx2']==idx2]['idx1'])
 
 def codebook_comparison(codebook,other_codebook,tolerated_error=0,strict=False):
     '''
@@ -73,18 +82,41 @@ def codebook_comparison(codebook,other_codebook,tolerated_error=0,strict=False):
     # get a pairing -- for each of entries in the codebook, find (at least one!) entry in other_codebook
     idx1=[]
     idx2=[]
-    for i in range(dsts.shape[0]):
+    for i in range(dsts.shape[0]):  # == range(J1)
         best=np.argmin(dsts[i])
         if dsts[i,best]<=tolerated_error:
             idx1.append(i)
             idx2.append(best)
 
-    barcode_pairing=pd.DataFrame(dict(
-        idx1=idx1,
-        idx2=idx2
-    ))
+    barcode_pairing=BarcodePairing(np.c_[idx1,idx2])
 
     return BarcodeFPFNResult(fn,fp,fdr,dr,barcode_pairing)
+
+def meanmin_divergence(u,v):
+    '''
+    Input
+    - u, (NxD) matrix
+    - v, (MxD) matrix
+
+    Output:
+
+        meanmin(u<v) = mean_i min_j |u[i]-v[j]|
+
+    If u is a subset of v, meanmin=0
+
+    Is u is nontrivial and v is empty, minmin = inf
+    '''
+
+    if len(u)==0: # then, by definition, l1 is a subset of l2
+        return 0.0
+    elif len(v)==0: # there's stuff in l1, but NOTHING in l2
+        return np.inf
+    else:
+        import sklearn.neighbors
+        X=sklearn.neighbors.BallTree(u)
+        dists=X.query(v,k=1,return_distance=True)
+        return np.mean(dists)
+
 
 
 def downsample1(x,ds,axis=0):
@@ -117,7 +149,7 @@ class Benchmark:
     X: np.array
     codebook: np.array
     rolonies: pd.DataFrame
-    GT_voxels: Optional[list] = None  # list of length J. 
+    GT_voxels: Optional[list] = None  # list of length J.
 
     def __post_init__(self):
         self.n_spots=len(self.rolonies)
@@ -164,7 +196,7 @@ class Benchmark:
             for nm in ['description','name','version']:
                 f.attrs[nm]=getattr(self,nm)
             f.create_dataset('X',data=self.X)
-            f.create_dataset('codebook',data=self.codebook)            
+            f.create_dataset('codebook',data=self.codebook)
             f.create_group('rolonies')
             for nm in ['j','m0','m1','m2']:
                 ds=np.array(self.rolonies[nm]).astype(np.int)
@@ -195,7 +227,42 @@ class Benchmark:
             rolonies
         )
 
+    def voxel_meanmin_divergences(self,df,barcode_pairing=None):
+        '''
+        Input:
+        - df, a dataframe of rolonies
+        - [optional] barcode_pairing, matching (js from self.rolonies) <--> (js from df)
 
+        Output:
+        - us_c_them_errors -- for each j, the failure of our voxels to be a subset of their voxels
+        - them_c_us_errors -- for each j, the failure of their voxels to be a subset of our voxels
+        - unmatched_barcodes -- for each j, whether that barcode was simply absent from the barcode pairing
+        '''
+
+        us_c_them_errors=np.zeros(self.n_genes)
+        them_c_us_errors=np.zeros(self.n_genes)
+
+        if barcode_pairing is not None:
+            assert barcode_pairing.book2_maps_unambiguously,"some of the df barcodes are mapped to more than one of our barcodes!"
+
+        for j in range(self.n_genes):
+            l1=self.rolonies[self.rolonies['j']==j][['m0','m1','m2']]
+
+            if barcode_pairing is not None:
+                l2=df[df['j'].isin(barcode_pairing.book1_lookup[j])][['m0','m1','m2']]
+            else:
+                l2=df[df['j']==j][['m0','m1','m2']]
+
+            us_c_them_errors[j]=meanmin_divergence(l1,l2)
+            them_c_us_errors[j]=meanmin_divergence(l2,l1)
+
+        unmatched_barcodes=np.zeros(self.n_genes,dtype=np.bool)
+        if barcode_pairing is not None:
+            for j in range(self.n_genes):
+                if len(barcode_pairing.book1_lookup[j])==0:
+                    unmatched_barcodes[j]=True
+
+        return us_c_them_errors,them_c_us_errors,unmatched_barcodes
 
     def rolony_fpfn(self,df,radius,good_subset=None):
         if len(df)==0:
@@ -291,7 +358,7 @@ def load_h5py(fn):
         for nm in ['description','name','version']:
             dct[nm]=f.attrs[nm]
         dct['X']=f['X'][:]
-        dct['codebook']=f['codebook'][:]        
+        dct['codebook']=f['codebook'][:]
 
         rn={}
         for nm in ['j','m0','m1','m2']:
@@ -299,7 +366,7 @@ def load_h5py(fn):
         for nm in ['remarks','status']:
             rn[nm]=f['rolonies/'+nm][:].astype('U')
         dct['rolonies']=pd.DataFrame(rn)
-        
+
         rn={}
         for nm in ['j','m0','m1','m2']:
             rn[nm]=f['GT_voxels/'+nm][:].astype(np.int)

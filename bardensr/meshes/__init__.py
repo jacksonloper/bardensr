@@ -200,25 +200,3 @@ def rol2X(rolonies,
 
 
 
-
-# def compute_smoothdorff(u, v, max_dis = 100):
-#     '''
-#     compute smoothdorff between u and v
-#     input:
-#         u/v: both numpy array (S, 2).  (TODO: 3d array?)
-#         Note v should be GT and cannot be empty.
-#         u can be empty in which case return the max_dis.
-#     output: a scalar. smaller, closer the predicted to the GT is.
-#     '''
-#     assert(v.shape[0] > 0)
-#     if (u.shape[0] == 0):
-#         return(max_dis)  # empty set for the detected spots --> bad!
-#     else:
-#         kdtree_u  = sp.spatial.KDTree(u.astype(float))
-#         kdtree_v  = sp.spatial.KDTree(v.astype(float))
-#         sdm = kdtree_u.sparse_distance_matrix(kdtree_v, max_dis)
-#         sdm_csr = sdm.tocsr()  # S_v x S_u in dense
-#         min0 = sdm_csr.min(axis = 0).astype(float)
-#         min1 = sdm_csr.min(axis = 1).astype(float)
-#         out = max(min0.todense().mean(), min1.todense().mean())
-#         return(out)
