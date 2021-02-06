@@ -6,6 +6,7 @@ import scipy as sp
 import scipy.spatial
 from typing import Optional
 import tqdm
+import trimesh
 
 def _locs_and_j_to_df(locs,j):
     return pd.DataFrame(dict(
@@ -175,6 +176,7 @@ class Benchmark:
     codebook: np.array
     rolonies: pd.DataFrame
     GT_voxels: Optional[list] = None  # list of length J. 
+    GT_meshes: Optional[list] = None  # list of length J. 
 
     def __post_init__(self):
         self.n_spots=len(self.rolonies)
@@ -232,7 +234,14 @@ class Benchmark:
             f.create_group('GT_voxels')
             for nm in ['j','m0','m1','m2']:
                 ds=np.array(self.GT_voxels[nm]).astype(np.int)
-                f.create_dataset('GT_voxels/'+nm,data=ds)
+                f.create_dataset('GT_voxels/'+nm,data=ds)            
+            f.create_group('GT_meshes')
+            self.v_list = [mesh.vertices for mesh in self.GT_meshes]
+            self.f_list = [mesh.faces for mesh in self.GT_meshes]
+            for i, (vertices,faces) in enumerate(zip(self.v_list, self.f_list)):                
+                f.create_dataset('GT_meshes/'+str(i)+'/vertices', data = vertices)
+                f.create_dataset('GT_meshes/'+str(i)+'/faces', data = faces)
+                
 
     def create_new_benchmark_with_more_rolonies(self,df):
         df=df.copy()
@@ -360,7 +369,16 @@ def load_h5py(fn):
         rn={}
         for nm in ['j','m0','m1','m2']:
             rn[nm]=f['GT_voxels/'+nm][:].astype(np.int)
-        dct['GT_voxels']=pd.DataFrame(rn)
+        dct['GT_voxels']=pd.DataFrame(rn)        
+
+        mesh_list = []    
+        for i in range(len(f['GT_meshes'])):
+            vertices =  f['GT_meshes/'+str(i)+'/vertices']
+            faces = f['GT_meshes/'+str(i)+'/faces']
+            mesh_list.append(trimesh.Trimesh(vertices, faces, process=False))
+        dct['GT_meshes'] = mesh_list
+    
+    
     bc=Benchmark(**dct)
     bc.source_fn=fn
     return bc
