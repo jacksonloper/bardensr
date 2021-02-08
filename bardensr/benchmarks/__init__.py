@@ -150,6 +150,8 @@ class Benchmark:
     codebook: np.array
     rolonies: pd.DataFrame
     GT_voxels: Optional[list] = None  # list of length J.
+    GT_meshes: Optional[list] = None  # list of (vertices,faces) of length J
+    units: Optional[str] = None # information about voxel units,
 
     def __post_init__(self):
         self.n_spots=len(self.rolonies)
@@ -208,6 +210,8 @@ class Benchmark:
             for nm in ['j','m0','m1','m2']:
                 ds=np.array(self.GT_voxels[nm]).astype(np.int)
                 f.create_dataset('GT_voxels/'+nm,data=ds)
+            f.create_group('GT_meshes')
+            raise NotImplementedError # for gt meshes!
 
     def create_new_benchmark_with_more_rolonies(self,df):
         df=df.copy()

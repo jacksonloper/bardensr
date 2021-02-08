@@ -98,25 +98,6 @@ def get_boundary_voxels(mesh:trimesh.Trimesh, pitch,mins,maxs):
 
     return out
 
-def sample_mesh_interior(mesh, poisrate, pitch):
-    '''
-    for one mesh, vozelize and return the rolony based on the poisson rate.
-    input:
-        mesh: watertight trimesh.Trimesh object
-        poisrate: density/(unit volume)
-        pitch: approximation level to use in sampling (lengthscale used for voxelation)
-    output:
-        locations: simulated spots inside the mesh; these locations will be divisible by pitch
-    '''
-    MX=pitch*(1+np.max(mesh.vertices,axis=0)//pitch)
-    MN=pitch*(np.min(mesh.vertices,axis=0)//pitch)
-    vv =voxelize(mesh,pitch,maxs=MX,mins=MN)
-    opts=np.array(np.where(vv)).T
-    counts=np.random.poisson(poisrate*pitch*pitch*pitch,size=len(opts))
-    opts=opts*pitch+np.array(MN)
-    finalopts=np.repeat(opts,counts,axis=0)
-    return finalopts
-
 def exhaustively_sample_mesh_interior(mesh,pitch):
     '''
     for one mesh, vozelize and return the rolony based on the poisson rate.
@@ -134,7 +115,7 @@ def exhaustively_sample_mesh_interior(mesh,pitch):
     return opts
 
 
-def sample_meshlist_interiors(submeshes,pitch = 100, poisrate=1e-8,num_workers=1,
+def voxelize_meshlist_interiors(submeshes,pitch = 100, num_workers=1,
                             use_tqdm_notebook=True):
     '''
     sample interiors of many meshes
@@ -143,7 +124,6 @@ def sample_meshlist_interiors(submeshes,pitch = 100, poisrate=1e-8,num_workers=1
         meshes: a list of trimesh.Trimesh object
         MX,MN : region to voxelize in
         pitch : size of a voxel in resulting dataset
-        poisrate: rate of poisson - higher, more rolonies are simulated
     output:
         rolonies: a list of locations, one for each mesh
     '''
@@ -152,51 +132,7 @@ def sample_meshlist_interiors(submeshes,pitch = 100, poisrate=1e-8,num_workers=1
         t=range(len(submeshes))
         if use_tqdm_notebook:
             t=tqdm.notebook.tqdm(t)
-        if poisrate==np.inf:
-            jobs=[ex.submit(exhaustively_sample_mesh_interior,mesh, pitch) for mesh in submeshes]
-        else:
-            jobs=[ex.submit(sample_mesh_interior,mesh,poisrate, pitch) for mesh in submeshes]
+        jobs=[ex.submit(exhaustively_sample_mesh_interior,mesh, pitch) for mesh in submeshes]
         for idx in t:
             rolonies.append(jobs[idx].result())
     return rolonies
-
-def rol2X(rolonies,
-          blursz = 2,
-          noiselevel = .01,
-          m2range = (0,25), R = 17, C = 4
-         ):
-    '''
-    create the benchmark dataset from the rolonies pd dataframe
-    input:
-        rolonies: the returned object from mesh2rol, pandas dataframe
-        m2thre: the range to look at (from 0 to m2thre)
-    output:
-        X: size of (R, C, M0, M1, M2)
-    '''
-    # restrict to m2<m2thre
-    good=(rolonies['m2']>=m2range[0]) & (rolonies['m2']<m2range[1])  # what is this 25??
-    rolonies=rolonies[good]
-    unq,rev=np.unique(rolonies['j'],return_inverse=True)
-#     rolonies['j']=rev   # what for ?
-    J=rolonies['j'].max()+1
-    codebook=np.random.randint(0,C,size=(J,R))
-    codebook=bardensr.misc.convert_codebook_to_onehot_form(codebook)
-    shape=(rolonies['m0'].max()+1,rolonies['m1'].max()+1,rolonies['m2'].max()+1)
-    X=np.zeros((R, C)+shape)
-    for j in tqdm.tqdm_notebook(range(J)):
-        subX=np.zeros_like(X)
-        good=rolonies['j']==j
-        subr=rolonies[good]
-        scales=np.random.rand(len(subr))+1
-        for r,c in zip(*np.where(codebook[:,:,j])):
-            subX[r,c,subr['m0'],subr['m1'],subr['m2']]+=scales
-        X+=subX
-    X=sp.ndimage.gaussian_filter(X,(0,0,blursz, blursz, blursz))
-    X=X+np.random.randn(*X.shape)*X.max()*noiselevel
-    X=np.clip(X,0,None)
-    return(X, codebook)
-
-
-
-
-
