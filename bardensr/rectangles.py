@@ -38,6 +38,20 @@ def sliceit0(F,st2,en2,fill_value=0.0):
     st1=np.zeros(len(F.shape),dtype=np.int)
     return sliceit(F,st1,st2,en2,fill_value=fill_value)
 
+def scatter_ignoreoob(base,indices,values):
+    '''
+    Input:
+    - base, an array (M0 x M1 x M2...Mn)
+    - indices, an array (S x n)
+    - vals, an array (S)
+
+    Sets base[indices[i]]=vals[i], but if indices[i] is oob it is ignored
+    '''
+
+    shp=np.array(base.shape)
+    good = (indices>=0).all(axis=1) & (indices<shp[None,:]).all(axis=1)
+    base[tuple(indices[good].T)]=values[good]
+
 def sliceit(F,st1,st2,en2,fill_value=0.0):
     '''
     Given a tensor F indicating the value of a function from st1 to st1+F.shape
