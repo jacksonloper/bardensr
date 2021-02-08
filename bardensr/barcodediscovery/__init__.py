@@ -8,6 +8,7 @@ import numpy.random as npr
 
 from .. import misc
 from .. import singlefov
+from . import purepixel
 
 import logging
 logger=logging.getLogger(__name__)
@@ -21,7 +22,30 @@ def merge_barcodes(A,B):
     B[np.isnan(B)]=A[np.isnan(B)] # but if B is ignorant, use info from A
     return B
 
-def codebook_deduplication_iteration(barcodes, thre):
+def nan_robust_hamming(A,B):
+    '''
+    Input:
+    - A (M x N1 )
+    - B (M x N2 )
+
+    Output
+    - diffs (N1 x N2)
+
+    diffs[i,j] = #{k: both A[i,k],B[i,k] are non-nan and A[i,k]!=B[i,k}
+    '''
+
+    differences = np.abs(A[:,None,:] - B[:,:,None]).astype(float) # M x N1 x N2
+
+    # if one of the barcodes says it doesn't know about one of the frames
+    # then we say that barcode doesnt disagree about that fram
+    differences[np.isnan(differences)]=0
+
+    # compute the total number of disagreements for each pair of barcodes
+    differences=np.sum(differences,axis=0) # N1 x N2
+
+    return differences
+
+def codebook_deduplication_iteration(barcodes, thre,differences=None):
     '''
     Take a codebook with possibly repeated barcodes (or nearly
     repeated, i.e. two barcodes within thresh) and get a codebook
@@ -32,20 +56,14 @@ def codebook_deduplication_iteration(barcodes, thre):
     - barcodes: array, new cleaner codebook
     '''
     R,C,J=barcodes.shape
+
     barcodes=barcodes.reshape((-1,barcodes.shape[-1]))
 
-    # for each pair of barcodes, find out which frames they disagree on
-    differences = np.abs(barcodes[:,None,:] - barcodes [:,:,None]).astype(float) # N x J x J
-
-    # if one of the barcodes says it doesn't know about one of the frames
-    # then we say that barcode doesnt disagree about that fram
-    differences[np.isnan(differences)]=0
-
-    # compute the total number of disagreements for each pair of barcodes
-    differences=np.sum(differences,axis=0) # J x J
-
-    # not interested in barcodes similarity to themselves!
-    differences[np.r_[0:J],np.r_[0:J]]=np.inf
+    if differences is None:
+        # calc hamming (but ignore nans!)
+        differences = nan_robust_hamming(barcodes,barcodes)
+        # not interested in barcodes similarity to themselves!
+        differences[np.r_[0:J],np.r_[0:J]]=np.inf
 
     # find, for each barcode, the barcode which is closest to it
     closest_barcodes=np.min(differences,axis=1) # length J, stores hamming distance to the closest barcodes.
@@ -55,30 +73,42 @@ def codebook_deduplication_iteration(barcodes, thre):
 
     if len(bad_barcodes)==0:
         # no such barcodes!  done!
-        return True,barcodes.reshape((R,C,-1))
+        return True,barcodes.reshape((R,C,-1)),differences
     else:
         # merge the barcodes which are too close
         j1=bad_barcodes[0]
         j2=np.argmin(differences[j1])
-        barcodes = barcodes.T
-        mergycode=merge_barcodes(barcodes[j1],barcodes[j2])
-        barcodes=list(barcodes)
-        barcodes.pop(j2)
-        barcodes[j1]=mergycode
-        return False,np.array(barcodes).T.reshape((R,C,-1))
+        assert j1<j2
+        mergycode=merge_barcodes(barcodes[:,j1],barcodes[:,j2])
+
+        # get a new barcode list by removing j2 and replacing j1
+        goodcodes=np.r_[0:j2-1,j2:barcodes.shape[1]]
+        barcodes=barcodes[:,goodcodes]
+        barcodes[:,j1]=mergycode
+
+        # get new diffs by removing j2 and replacing j1
+        differences=differences[goodcodes]
+        differences=differences[:,goodcodes]
+        differences[j1]=nan_robust_hamming(barcodes[:,[j1]],barcodes).ravel()
+        differences[:,j1]=differences[j1].ravel()
+        differences[j1,j1]=np.inf
+
+        # done!
+        return False,np.array(barcodes).reshape((R,C,-1)),differences
 
 def codebook_deduplication(barcodes, thre = 1,onehot=True,use_tqdm_notebook=False):
+    diffs=None
     if use_tqdm_notebook:
         import tqdm.notebook
-        with tqdm.notebook.tqdm() as t:
+        with tqdm.notebook.tqdm(leave=False) as t:
             while True:
                 t.update(1)
-                done,barcodes=codebook_deduplication_iteration(barcodes, thre)
+                done,barcodes,diffs=codebook_deduplication_iteration(barcodes, thre,diffs)
                 if done:
                     return barcodes
     else:
         while True:
-            done,barcodes=codebook_deduplication_iteration(barcodes, thre)
+            done,barcodes,diffs=codebook_deduplication_iteration(barcodes, thre,diffs)
             if done:
                 return barcodes
 
