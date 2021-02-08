@@ -21,7 +21,8 @@ def mess_up_barcode(barcode,signal_range,per_frame_signal_range,dropout_probabil
     barcode = barcode *(npr.rand(R,C)*(signal_range[1]-signal_range[0]) + signal_range[0])
     return barcode
 
-def prepare_meshes_for_benchmark(meshlist,pitch,poisson_rate,num_workers=1,use_tqdm_notebook=False):
+def prepare_meshes_for_benchmark(meshlist,pitch,poisson_rate,num_workers=1,use_tqdm_notebook=False,
+                                                    maxout_count=np.inf):
     '''
     Moves meshes into a new coordinate system, voxelizes them
     in that coordinate system, and generates rolonies inside
@@ -72,6 +73,8 @@ def prepare_meshes_for_benchmark(meshlist,pitch,poisson_rate,num_workers=1,use_t
     ))
 
     counts=npr.poisson(poisson_rate*(pitch*pitch*pitch),size=len(locations))
+    if maxout_count is not np.inf:
+        counts[counts>maxout_count]=maxout_count
     locations2=np.repeat(locations,counts,axis=0)
     rolonies=pd.DataFrame(dict(
         m0=locations2[:,0],

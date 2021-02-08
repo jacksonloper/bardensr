@@ -19,7 +19,7 @@ def plotmesh(mesh,**kwargs):
                     **kwargs)
 
 
-def meanmin_plot(E1,E2,unmatched):
+def meanmin_plot(E1,E2,unmatched,legend=True):
     srt=np.argsort(E1)
 
     nothingfound=(E1==np.inf)
@@ -34,14 +34,24 @@ def meanmin_plot(E1,E2,unmatched):
     # plot total detection failures
     bad=np.where(unmatched[srt])[0]
     plt.plot(bad,np.zeros(len(bad)),'C2x',label=f'this barcode was not identified ({len(bad)} examples)')
+    if len(bad)>0:
+        plt.axvline(bad[0],color='black')
 
     # plot spot detection failure
     bad=np.where((~unmatched[srt])*(E1[srt]==np.inf))[0]
     plt.plot(bad,np.zeros(len(bad)),'rx',label=f'barcode identified, but no spots found ({len(bad)} barcodes)')
+    if len(bad)>0:
+        plt.axvline(bad[0],color='black')
 
-    plt.legend()
+    if legend:
+        plt.legend()
     plt.ylabel("meannmin divergences")
     plt.axhline(0)
+
+def foc3(ctr,radius):
+    plt.gca().set_xlim3d(ctr[0]-radius,ctr[0]+radius)
+    plt.gca().set_ylim3d(ctr[1]-radius,ctr[1]+radius)
+    plt.gca().set_zlim3d(ctr[2]-radius,ctr[2]+radius)
 
 def eqaq3(ax=None):
     if ax is None:

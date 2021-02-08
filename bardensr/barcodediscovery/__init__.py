@@ -67,11 +67,20 @@ def codebook_deduplication_iteration(barcodes, thre):
         barcodes[j1]=mergycode
         return False,np.array(barcodes).T.reshape((R,C,-1))
 
-def codebook_deduplication(barcodes, thre = 1,onehot=True):
-    while True:
-        done,barcodes=codebook_deduplication_iteration(barcodes, thre)
-        if done:
-            return barcodes
+def codebook_deduplication(barcodes, thre = 1,onehot=True,use_tqdm_notebook=False):
+    if use_tqdm_notebook:
+        import tqdm.notebook
+        with tqdm.notebook.tqdm() as t:
+            while True:
+                t.update(1)
+                done,barcodes=codebook_deduplication_iteration(barcodes, thre)
+                if done:
+                    return barcodes
+    else:
+        while True:
+            done,barcodes=codebook_deduplication_iteration(barcodes, thre)
+            if done:
+                return barcodes
 
 def trivial_codebook_deduplication(cb):
     R,C,J=cb.shape

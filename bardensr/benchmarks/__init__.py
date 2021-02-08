@@ -9,13 +9,16 @@ from typing import Optional
 import tqdm
 import trimesh
 
-def _locs_and_j_to_df(locs,j):
+def locs_and_j_to_df(locs,j):
     return pd.DataFrame(dict(
         m0=locs[:,0],
         m1=locs[:,1],
         m2=locs[:,2],
         j=j
     ))
+
+def df_to_locs_and_j(df):
+    return np.array(df[['m0','m1','m2']]),np.array(df['j'])
 
 @dataclasses.dataclass
 class RolonyFPFNResult:
@@ -192,7 +195,7 @@ class Benchmark:
 
     def save_hdf5(self,fn):
         with h5py.File(fn,'w') as f:
-            for nm in ['description','name','version']:
+            for nm in ['description','name','version','units']:
                 f.attrs[nm]=getattr(self,nm)
             f.create_dataset('X',data=self.X)
             f.create_dataset('codebook',data=self.codebook)
@@ -203,17 +206,20 @@ class Benchmark:
             for nm in ['remarks','status']:
                 ds=np.array(self.rolonies[nm]).astype("S")
                 f.create_dataset('rolonies/'+nm,data=ds)
-            f.create_group('GT_voxels')
-            for nm in ['j','m0','m1','m2']:
-                ds=np.array(self.GT_voxels[nm]).astype(np.int)
-                f.create_dataset('GT_voxels/'+nm,data=ds)
-            f.create_group('GT_meshes')
-            self.v_list = [mesh.vertices for mesh in self.GT_meshes]
-            self.f_list = [mesh.faces for mesh in self.GT_meshes]
-            for i, (vertices,faces) in enumerate(zip(self.v_list, self.f_list)):
-                f.create_dataset('GT_meshes/'+str(i)+'/vertices', data = vertices)
-                f.create_dataset('GT_meshes/'+str(i)+'/faces', data = faces)
 
+            if self.GT_voxels is not None:
+                f.create_group('GT_voxels')
+                for nm in ['j','m0','m1','m2']:
+                    ds=np.array(self.GT_voxels[nm]).astype(np.int)
+                    f.create_dataset('GT_voxels/'+nm,data=ds)
+
+            if self.GT_meshes is not None:
+                f.create_group('GT_meshes')
+                self.v_list = [mesh.vertices for mesh in self.GT_meshes]
+                self.f_list = [mesh.faces for mesh in self.GT_meshes]
+                for i, (vertices,faces) in enumerate(zip(self.v_list, self.f_list)):
+                    f.create_dataset('GT_meshes/'+str(i)+'/vertices', data = vertices)
+                    f.create_dataset('GT_meshes/'+str(i)+'/faces', data = faces)
 
     def create_new_benchmark_with_more_rolonies(self,df):
         df=df.copy()
@@ -272,7 +278,7 @@ class Benchmark:
 
     def rolony_fpfn(self,df,radius,good_subset=None):
         if len(df)==0:
-            noro=_locs_and_j_to_df(
+            noro=locs_and_j_to_df(
                 np.zeros((0,3),dtype=np.int),
                 np.zeros(0,dtype=np.int),
             ),
@@ -361,7 +367,7 @@ def query_onehot_codebook(codebook,s):
 def load_h5py(fn):
     dct={}
     with h5py.File(fn,'r') as f:
-        for nm in ['description','name','version']:
+        for nm in ['description','name','version','units']:
             dct[nm]=f.attrs[nm]
         dct['X']=f['X'][:]
         dct['codebook']=f['codebook'][:]
@@ -373,17 +379,23 @@ def load_h5py(fn):
             rn[nm]=f['rolonies/'+nm][:].astype('U')
         dct['rolonies']=pd.DataFrame(rn)
 
-        rn={}
-        for nm in ['j','m0','m1','m2']:
-            rn[nm]=f['GT_voxels/'+nm][:].astype(np.int)
-        dct['GT_voxels']=pd.DataFrame(rn)
+        if 'GT_voxels' in f:
+            rn={}
+            for nm in ['j','m0','m1','m2']:
+                rn[nm]=f['GT_voxels/'+nm][:].astype(np.int)
+            dct['GT_voxels']=pd.DataFrame(rn)
+        else:
+            dct['GT_voxels']=None
 
-        mesh_list = []
-        for i in range(len(f['GT_meshes'])):
-            vertices =  f['GT_meshes/'+str(i)+'/vertices']
-            faces = f['GT_meshes/'+str(i)+'/faces']
-            mesh_list.append(trimesh.Trimesh(vertices, faces, process=False))
-        dct['GT_meshes'] = mesh_list
+        if 'GT_voxels' in f:
+            mesh_list = []
+            for i in range(len(f['GT_meshes'])):
+                vertices =  f['GT_meshes/'+str(i)+'/vertices']
+                faces = f['GT_meshes/'+str(i)+'/faces']
+                mesh_list.append(trimesh.Trimesh(vertices, faces, process=False))
+            dct['GT_meshes'] = mesh_list
+        else:
+            dct['GT_voxels']=None
 
 
     bc=Benchmark(**dct)
