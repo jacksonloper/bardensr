@@ -99,14 +99,6 @@ def meanmin_divergence(u,v):
     Input
     - u, (NxD) matrix
     - v, (MxD) matrix
-
-    Output:
-
-def meanmin_divergence(u,v):
-    '''
-    Input
-    - u, (NxD) matrix
-    - v, (MxD) matrix
     Output:
         meanmin(u<v) = mean_i min_j |u[i]-v[j]|
     If u is a subset of v, meanmin=0
