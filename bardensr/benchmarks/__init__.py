@@ -148,7 +148,8 @@ class Benchmark:
     codebook: np.array
     rolonies: pd.DataFrame
     GT_voxels: Optional[list] = None  # list of length J.
-    GT_meshes: Optional[list] = None  # list of length J.
+    GT_meshes: Optional[list] = None  # list of (vertices,faces) of length J
+    units: Optional[str] = None # information about voxel units,
 
     def __post_init__(self):
         self.n_spots=len(self.rolonies)

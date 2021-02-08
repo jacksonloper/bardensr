@@ -3,6 +3,7 @@ from .. import misc
 import numpy.random as npr
 import pandas as pd
 import scipy as sp
+from .. import meshes
 
 import logging
 
@@ -12,18 +13,6 @@ def simulate_codebook(R,C,J):
     A=npr.randint(0,C,size=(J,R))
     return misc.convert_codebook_to_onehot_form(A)
 
-def convert_rolony_location_list_to_voxel_coordinate_dataframe(locations,pitch):
-    locations=[(x//pitch).astype(np.int) for x in locations]
-    locations=[np.c_[x,np.full(len(x),i)] for i,x in enumerate(locations)]
-    locations=np.concatenate(locations,axis=0)
-    assert (np.min(locations,axis=0)[:3]>=0).all(),'negative locations not permitted'
-    return pd.DataFrame(dict(
-        m0=locations[:,0],
-        m1=locations[:,1],
-        m2=locations[:,2],
-        j=locations[:,3],
-    ))
-
 def mess_up_barcode(barcode,signal_range,per_frame_signal_range,dropout_probability):
     R,C=barcode.shape
     barcode=barcode.copy().astype(np.float64)
@@ -31,6 +20,67 @@ def mess_up_barcode(barcode,signal_range,per_frame_signal_range,dropout_probabil
     barcode=barcode*(npr.rand()*(signal_range[1]-signal_range[0]) + signal_range[0])
     barcode = barcode *(npr.rand(R,C)*(signal_range[1]-signal_range[0]) + signal_range[0])
     return barcode
+
+def prepare_meshes_for_benchmark(meshlist,pitch,poisson_rate,num_workers=1,use_tqdm_notebook=False):
+    '''
+    Moves meshes into a new coordinate system, voxelizes them
+    in that coordinate system, and generates rolonies inside
+    the voxelizations
+
+    Input:
+    - meshlist, a list of watertight trimesh.Trimesh objects
+    - pitch, length of voxel
+
+    Output:
+    - new_meshes, a new list of watertight trimesh.Trimesh objects, in a new reference frame
+    - GT_voxels, a dataframe indicating positions of all voxels inside the meshes
+    - rolonies, a dataframe indicating rolonies inside the meshes, sampled with poisrate in the original units
+    - translation, a vector indicating how original meshes were translated
+
+    Meshes are moved into a new coordinate system, such that
+
+        new_meshes[5].vertices = (meshlist[5].vertices - translation)/pitch
+
+    GT_voxels then indicate positions which are contained within each of these
+    transformes meshes, i.e. if we have
+
+    GT_voxels.iloc[3]:
+        m0 = 3
+        m1 = 10
+        m2 = 12
+        j  = 15
+
+    That signifies that the point [3,10,12] is (approximately) contained inside new_meshes[15]
+    '''
+
+    import trimesh
+
+    translation=np.min([np.min(x.vertices,axis=0) for x in meshlist],axis=0)
+    new_meshes=[trimesh.Trimesh((x.vertices-translation[None,:])/pitch,x.faces) for x in meshlist]
+
+    voxel_lists=meshes.voxelize_meshlist_interiors(new_meshes,pitch=1.0,
+                            num_workers=num_workers,use_tqdm_notebook=use_tqdm_notebook)
+
+    locations=[x.astype(np.int) for x in voxel_lists]
+    locations=[np.c_[x,np.full(len(x),i)] for i,x in enumerate(locations)]
+    locations=np.concatenate(locations,axis=0)
+    GT_voxels=pd.DataFrame(dict(
+        m0=locations[:,0],
+        m1=locations[:,1],
+        m2=locations[:,2],
+        j=locations[:,3],
+    ))
+
+    counts=npr.poisson(poisson_rate*(pitch*pitch*pitch),size=len(locations))
+    locations2=np.repeat(locations,counts,axis=0)
+    rolonies=pd.DataFrame(dict(
+        m0=locations2[:,0],
+        m1=locations2[:,1],
+        m2=locations2[:,2],
+        j=locations2[:,3],
+    ))
+
+    return new_meshes,GT_voxels,rolonies,translation
 
 def simulate_imagestack(rolonies,codebook,
                 dropout_probability=0.0,
