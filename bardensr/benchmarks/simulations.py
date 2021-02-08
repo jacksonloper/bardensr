@@ -13,12 +13,16 @@ def simulate_codebook(R,C,J):
     A=npr.randint(0,C,size=(J,R))
     return misc.convert_codebook_to_onehot_form(A)
 
-def mess_up_barcode(barcode,signal_range,per_frame_signal_range,dropout_probability):
+def mess_up_barcode(barcode,signal_range, per_frame_signal_range,
+                    dropout_probability, num_dropout_r = 1, dropout_intensity = 0.1):
     R,C=barcode.shape
     barcode=barcode.copy().astype(np.float64)
-    barcode[npr.rand()<.5]=0 # dropout
     barcode=barcode*(npr.rand()*(signal_range[1]-signal_range[0]) + signal_range[0])
-    barcode = barcode *(npr.rand(R,C)*(signal_range[1]-signal_range[0]) + signal_range[0])
+    barcode = barcode *(npr.rand(R,C)*(per_frame_signal_range[1]-per_frame_signal_range[0]) + per_frame_signal_range[0])
+    if npr.rand(1) < dropout_probability:  # Dropout this spot!
+        DO_r = npr.randint(R, size = num_dropout_r)
+        active_c = np.argmax(barcode, axis = 1)[DO_r]
+        barcode[DO_r, active_c] *= dropout_intensity
     return barcode
 
 def prepare_meshes_for_benchmark(meshlist,pitch,poisson_rate,num_workers=1,use_tqdm_notebook=False):

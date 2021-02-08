@@ -5,6 +5,29 @@ import io
 
 from mpl_toolkits.mplot3d import Axes3D
 
+from mpl_toolkits import mplot3d
+def set_axes_equal(ax):
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
+
+    x_range = abs(x_limits[1] - x_limits[0])
+    x_middle = np.mean(x_limits)
+    y_range = abs(y_limits[1] - y_limits[0])
+    y_middle = np.mean(y_limits)
+    z_range = abs(z_limits[1] - z_limits[0])
+    z_middle = np.mean(z_limits)
+
+    # The plot bounding box is a sphere in the sense of the infinity
+    # norm, hence I call half the max range the plot radius.
+    plot_radius = 0.5*max([x_range, y_range, z_range])
+
+    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+
+    
+    
 def savefig_PIL(format='png',bbox_inches='tight',**kwargs):
     with io.BytesIO() as f:
         plt.savefig(f,format=format,bbox_inches=bbox_inches,**kwargs)
@@ -17,9 +40,14 @@ def plotmesh(mesh,**kwargs):
     ax = fig.gca(projection='3d')
     ax.plot_trisurf(*mesh.vertices.T,triangles=mesh.faces,linewidth=0.2, antialiased=True,
                     **kwargs)
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z');
+    set_axes_equal(ax);
 
 
-def meanmin_plot(E1,E2,unmatched):
+
+def meanmin_plot(E1,E2,unmatched, legend = True):
     srt=np.argsort(E1)
 
     nothingfound=(E1==np.inf)
@@ -39,7 +67,8 @@ def meanmin_plot(E1,E2,unmatched):
     bad=np.where((~unmatched[srt])*(E1[srt]==np.inf))[0]
     plt.plot(bad,np.zeros(len(bad)),'rx',label=f'barcode identified, but no spots found ({len(bad)} barcodes)')
 
-    plt.legend()
+    if legend:
+        plt.legend()
     plt.ylabel("meannmin divergences")
     plt.axhline(0)
 
