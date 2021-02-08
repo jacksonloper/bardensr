@@ -7,6 +7,7 @@ import scipy as sp
 import scipy.spatial
 from typing import Optional
 import tqdm
+import trimesh
 
 def _locs_and_j_to_df(locs,j):
     return pd.DataFrame(dict(
@@ -40,6 +41,7 @@ class BarcodePairing:
 
         self.book1_maps_unambiguously = (np.max([len(self.book1_lookup[j]) for j in self.book1_lookup])<=1)
         self.book2_maps_unambiguously = (np.max([len(self.book2_lookup[j]) for j in self.book2_lookup])<=1)
+
 
 @dataclasses.dataclass
 class BarcodeFPFNResult:
@@ -100,10 +102,14 @@ def meanmin_divergence(u,v):
 
     Output:
 
+def meanmin_divergence(u,v):
+    '''
+    Input
+    - u, (NxD) matrix
+    - v, (MxD) matrix
+    Output:
         meanmin(u<v) = mean_i min_j |u[i]-v[j]|
-
     If u is a subset of v, meanmin=0
-
     Is u is nontrivial and v is empty, minmin = inf
     '''
 
@@ -150,6 +156,7 @@ class Benchmark:
     codebook: np.array
     rolonies: pd.DataFrame
     GT_voxels: Optional[list] = None  # list of length J.
+    GT_meshes: Optional[list] = None  # list of length J.
 
     def __post_init__(self):
         self.n_spots=len(self.rolonies)
@@ -208,6 +215,13 @@ class Benchmark:
             for nm in ['j','m0','m1','m2']:
                 ds=np.array(self.GT_voxels[nm]).astype(np.int)
                 f.create_dataset('GT_voxels/'+nm,data=ds)
+            f.create_group('GT_meshes')
+            self.v_list = [mesh.vertices for mesh in self.GT_meshes]
+            self.f_list = [mesh.faces for mesh in self.GT_meshes]
+            for i, (vertices,faces) in enumerate(zip(self.v_list, self.f_list)):
+                f.create_dataset('GT_meshes/'+str(i)+'/vertices', data = vertices)
+                f.create_dataset('GT_meshes/'+str(i)+'/faces', data = faces)
+
 
     def create_new_benchmark_with_more_rolonies(self,df):
         df=df.copy()
@@ -245,6 +259,23 @@ class Benchmark:
         if barcode_pairing is not None:
             assert barcode_pairing.book2_maps_unambiguously,"some of the df barcodes are mapped to more than one of our barcodes!"
 
+    def voxel_meanmin_divergences(self,df,barcode_pairing=None):
+        '''
+        Input:
+        - df, a dataframe of rolonies
+        - [optional] barcode_pairing, matching (js from self.rolonies) <--> (js from df)
+        Output:
+        - us_c_them_errors -- for each j, the failure of our voxels to be a subset of their voxels
+        - them_c_us_errors -- for each j, the failure of their voxels to be a subset of our voxels
+        - unmatched_barcodes -- for each j, whether that barcode was simply absent from the barcode pairing
+        '''
+
+        us_c_them_errors=np.zeros(self.n_genes)
+        them_c_us_errors=np.zeros(self.n_genes)
+
+        if barcode_pairing is not None:
+            assert barcode_pairing.book2_maps_unambiguously,"some of the df barcodes are mapped to more than one of our barcodes!"
+
         for j in range(self.n_genes):
             l1=self.rolonies[self.rolonies['j']==j][['m0','m1','m2']]
 
@@ -253,7 +284,7 @@ class Benchmark:
             else:
                 l2=df[df['j']==j][['m0','m1','m2']]
 
-            us_c_them_errors[j]=meanmin_divergence(l1,l2)
+            us_c_them_errors[j]=meanmin_divergence(l1,l2) # if l1 is subset of l2 -- >, l1 fails to cover l2
             them_c_us_errors[j]=meanmin_divergence(l2,l1)
 
         unmatched_barcodes=np.zeros(self.n_genes,dtype=np.bool)
@@ -371,6 +402,15 @@ def load_h5py(fn):
         for nm in ['j','m0','m1','m2']:
             rn[nm]=f['GT_voxels/'+nm][:].astype(np.int)
         dct['GT_voxels']=pd.DataFrame(rn)
+
+        mesh_list = []
+        for i in range(len(f['GT_meshes'])):
+            vertices =  f['GT_meshes/'+str(i)+'/vertices']
+            faces = f['GT_meshes/'+str(i)+'/faces']
+            mesh_list.append(trimesh.Trimesh(vertices, faces, process=False))
+        dct['GT_meshes'] = mesh_list
+
+
     bc=Benchmark(**dct)
     bc.source_fn=fn
     return bc
