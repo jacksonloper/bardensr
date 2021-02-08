@@ -111,10 +111,9 @@ def meanmin_divergence(u,v):
         return np.inf
     else:
         import sklearn.neighbors
-        X=sklearn.neighbors.BallTree(u)
-        dists=X.query(v,k=1,return_distance=True)
+        X=sklearn.neighbors.BallTree(v)
+        dists=X.query(u,k=1,return_distance=True)[0]
         return np.mean(dists)
-
 
 
 def downsample1(x,ds,axis=0):
@@ -252,25 +251,8 @@ class Benchmark:
         if barcode_pairing is not None:
             assert barcode_pairing.book2_maps_unambiguously,"some of the df barcodes are mapped to more than one of our barcodes!"
 
-    def voxel_meanmin_divergences(self,df,barcode_pairing=None):
-        '''
-        Input:
-        - df, a dataframe of rolonies
-        - [optional] barcode_pairing, matching (js from self.rolonies) <--> (js from df)
-        Output:
-        - us_c_them_errors -- for each j, the failure of our voxels to be a subset of their voxels
-        - them_c_us_errors -- for each j, the failure of their voxels to be a subset of our voxels
-        - unmatched_barcodes -- for each j, whether that barcode was simply absent from the barcode pairing
-        '''
-
-        us_c_them_errors=np.zeros(self.n_genes)
-        them_c_us_errors=np.zeros(self.n_genes)
-
-        if barcode_pairing is not None:
-            assert barcode_pairing.book2_maps_unambiguously,"some of the df barcodes are mapped to more than one of our barcodes!"
-
         for j in range(self.n_genes):
-            l1=self.rolonies[self.rolonies['j']==j][['m0','m1','m2']]
+            l1=self.GT_voxels[self.GT_voxels['j']==j][['m0','m1','m2']]
 
             if barcode_pairing is not None:
                 l2=df[df['j'].isin(barcode_pairing.book1_lookup[j])][['m0','m1','m2']]

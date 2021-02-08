@@ -19,6 +19,30 @@ def plotmesh(mesh,**kwargs):
                     **kwargs)
 
 
+def meanmin_plot(E1,E2,unmatched):
+    srt=np.argsort(E1)
+
+    nothingfound=(E1==np.inf)
+    nothingcouldbefound=unmatched
+
+    J=len(E1)
+
+    # plot mmds errors
+    plt.plot(range(J),E1[srt],'.',label='failure to cover')
+    plt.plot(range(J),-E2[srt],'.',label='failure to be contained')
+
+    # plot total detection failures
+    bad=np.where(unmatched[srt])[0]
+    plt.plot(bad,np.zeros(len(bad)),'C2x',label=f'this barcode was not identified ({len(bad)} examples)')
+
+    # plot spot detection failure
+    bad=np.where((~unmatched[srt])*(E1[srt]==np.inf))[0]
+    plt.plot(bad,np.zeros(len(bad)),'rx',label=f'barcode identified, but no spots found ({len(bad)} barcodes)')
+
+    plt.legend()
+    plt.ylabel("meannmin divergences")
+    plt.axhline(0)
+
 def eqaq3(ax=None):
     if ax is None:
         ax=plt.gca()
