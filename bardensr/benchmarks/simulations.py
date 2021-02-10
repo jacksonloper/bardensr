@@ -17,17 +17,11 @@ def mess_up_barcode(barcode,signal_range, per_frame_signal_range,
                     dropout_probability, num_dropout_r = 1, dropout_intensity = 0.1):
     R,C=barcode.shape
     barcode=barcode.copy().astype(np.float64)
-<<<<<<< HEAD
-    barcode[npr.rand(R,C)<dropout_probability]=0 # dropout
-    barcode=barcode*(npr.rand()*(signal_range[1]-signal_range[0]) + signal_range[0])
-    barcode = barcode *(npr.rand(R,C)*(per_frame_signal_range[1]-per_frame_signal_range[0]) + per_frame_signal_range[0])
-=======
     barcode=barcode*(npr.rand()*(signal_range[1]-signal_range[0]) + signal_range[0])
     barcode = barcode *(npr.rand(R,C)*(per_frame_signal_range[1]-per_frame_signal_range[0]) + per_frame_signal_range[0])
     if npr.rand() < dropout_probability:  # Dropout this spot!
         DO_r = npr.choice(R, size = num_dropout_r, replace = False)
         barcode[DO_r] *= dropout_intensity
->>>>>>> sc/newedits
     return barcode
 
 def prepare_meshes_for_benchmark(meshlist,pitch,poisson_rate,num_workers=1,use_tqdm_notebook=False,
@@ -96,7 +90,7 @@ def prepare_meshes_for_benchmark(meshlist,pitch,poisson_rate,num_workers=1,use_t
 
 def simulate_imagestack(rolonies,codebook,
                 dropout_probability=0.0,
-                num_dropout_r = 1, 
+                num_dropout_r = 1,
                 dropout_intensity = 0.1,
                 speckle_noise=.01,
                 signal_range=(10,15),
