@@ -13,12 +13,21 @@ def simulate_codebook(R,C,J):
     A=npr.randint(0,C,size=(J,R))
     return misc.convert_codebook_to_onehot_form(A)
 
-def mess_up_barcode(barcode,signal_range,per_frame_signal_range,dropout_probability):
+def mess_up_barcode(barcode,signal_range, per_frame_signal_range,
+                    dropout_probability, num_dropout_r = 1, dropout_intensity = 0.1):
     R,C=barcode.shape
     barcode=barcode.copy().astype(np.float64)
+<<<<<<< HEAD
     barcode[npr.rand(R,C)<dropout_probability]=0 # dropout
     barcode=barcode*(npr.rand()*(signal_range[1]-signal_range[0]) + signal_range[0])
     barcode = barcode *(npr.rand(R,C)*(per_frame_signal_range[1]-per_frame_signal_range[0]) + per_frame_signal_range[0])
+=======
+    barcode=barcode*(npr.rand()*(signal_range[1]-signal_range[0]) + signal_range[0])
+    barcode = barcode *(npr.rand(R,C)*(per_frame_signal_range[1]-per_frame_signal_range[0]) + per_frame_signal_range[0])
+    if npr.rand() < dropout_probability:  # Dropout this spot!
+        DO_r = npr.choice(R, size = num_dropout_r, replace = False)
+        barcode[DO_r] *= dropout_intensity
+>>>>>>> sc/newedits
     return barcode
 
 def prepare_meshes_for_benchmark(meshlist,pitch,poisson_rate,num_workers=1,use_tqdm_notebook=False,
@@ -87,6 +96,8 @@ def prepare_meshes_for_benchmark(meshlist,pitch,poisson_rate,num_workers=1,use_t
 
 def simulate_imagestack(rolonies,codebook,
                 dropout_probability=0.0,
+                num_dropout_r = 1, 
+                dropout_intensity = 0.1,
                 speckle_noise=.01,
                 signal_range=(10,15),
                 per_frame_signal_range=(1.0,1.0),
@@ -97,6 +108,9 @@ def simulate_imagestack(rolonies,codebook,
     Input
     - rolonies, a dataframe with voxel positions m0,m1,m2 and j (index)
     - codebook, a codebook!
+    - [optional] dropout_probability -- the proportion of the spots that should be dropped out
+    - [optional] num_dropout_r -- the number of rounds that drops out
+    - [optional] dropout_intensity -- if the fram signal is dropped out, the original intensity compared to original
     - [optional] speckle_noise -- how much iid gaussian noise to add to the data
     - [optional] signal_range -- how much rolonies vary in total intensity
     - [optional] per_frame_signal_range -- how much rolonies will vary in intensity between rounds/channels
@@ -118,7 +132,8 @@ def simulate_imagestack(rolonies,codebook,
         m1=val.m1
         m2=val.m2
         j=val.j
-        bc = mess_up_barcode(codebook[:,:,j],signal_range,per_frame_signal_range,dropout_probability)
+        bc = mess_up_barcode(codebook[:,:,j],signal_range,per_frame_signal_range,
+                             dropout_probability,num_dropout_r,dropout_intensity)
         X[:,:,m0,m1,m2]+=bc
 
     if blursz is not None:
