@@ -20,6 +20,14 @@ def maybe_trange(n,use_tqdm_notebook):
     else:
         return range(n)
 
+
+def maybe_tqdm(n,use_tqdm_notebook,*args,**kwargs):
+    if use_tqdm_notebook:
+        import tqdm.notebook
+        return tqdm.notebook.tqdm(n,*args,**kwargs)
+    else:
+        return n
+
 def convert_codebook_to_onehot_form(codebook):
     '''
     Input: codebook, JxR

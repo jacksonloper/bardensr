@@ -34,94 +34,36 @@ def nan_robust_hamming(A,B):
     diffs[i,j] = #{k: both A[i,k],B[i,k] are non-nan and A[i,k]!=B[i,k}
     '''
 
-    differences = np.abs(A[:,None,:] - B[:,:,None]).astype(float) # M x N1 x N2
+    M,N1=A.shape
+    M,N2=A.shape
 
-    # if one of the barcodes says it doesn't know about one of the frames
-    # then we say that barcode doesnt disagree about that fram
-    differences[np.isnan(differences)]=0
+    differences=0
 
-    # compute the total number of disagreements for each pair of barcodes
-    differences=np.sum(differences,axis=0) # N1 x N2
+    for m in range(M):
+        subdifferences = np.abs(A[m,None,:] - B[m,:,None]).astype(float) # N1 x N2
+
+        # if one of the barcodes says it doesn't know about one of the frames
+        # then we say that barcode doesnt disagree about that fram
+        subdifferences[np.isnan(subdifferences)]=0
+
+        # compute the total number of disagreements for each pair of barcodes
+        differences+=subdifferences # N1 x N2
 
     return differences
 
-def codebook_deduplication_iteration(barcodes, thre,differences=None):
-    '''
-    Take a codebook with possibly repeated barcodes (or nearly
-    repeated, i.e. two barcodes within thresh) and get a codebook
-    which is just a little bit cleaner.
-
-    Out
-    - improved: boolean, whether we did anything useful
-    - barcodes: array, new cleaner codebook
-    '''
-    R,C,J=barcodes.shape
-
-    barcodes=barcodes.reshape((-1,barcodes.shape[-1]))
-
-    if differences is None:
-        # calc hamming (but ignore nans!)
-        differences = nan_robust_hamming(barcodes,barcodes)
-        # not interested in barcodes similarity to themselves!
-        differences[np.r_[0:J],np.r_[0:J]]=np.inf
-
-    # find, for each barcode, the barcode which is closest to it
-    closest_barcodes=np.min(differences,axis=1) # length J, stores hamming distance to the closest barcodes.
-
-    # find barcodes which are TOO CLOSE to some other barcode
-    bad_barcodes = np.where(closest_barcodes <= thre)[0]
-
-    if len(bad_barcodes)==0:
-        # no such barcodes!  done!
-        return True,barcodes.reshape((R,C,-1)),differences
-    else:
-        # merge the barcodes which are too close
-        j1=bad_barcodes[0]
-        j2=np.argmin(differences[j1])
-        assert j1<j2
-        mergycode=merge_barcodes(barcodes[:,j1],barcodes[:,j2])
-
-        # get a new barcode list by removing j2 and replacing j1
-        goodcodes=np.r_[0:j2-1,j2:barcodes.shape[1]]
-        barcodes=barcodes[:,goodcodes]
-        barcodes[:,j1]=mergycode
-
-        # get new diffs by removing j2 and replacing j1
-        differences=differences[goodcodes]
-        differences=differences[:,goodcodes]
-        differences[j1]=nan_robust_hamming(barcodes[:,[j1]],barcodes).ravel()
-        differences[:,j1]=differences[j1].ravel()
-        differences[j1,j1]=np.inf
-
-        # done!
-        return False,np.array(barcodes).reshape((R,C,-1)),differences
-
-def codebook_deduplication(barcodes, thre = 1,onehot=True,use_tqdm_notebook=False):
-    diffs=None
-    if use_tqdm_notebook:
-        import tqdm.notebook
-        with tqdm.notebook.tqdm(leave=False) as t:
-            while True:
-                t.update(1)
-                done,barcodes,diffs=codebook_deduplication_iteration(barcodes, thre,diffs)
-                if done:
-                    return barcodes
-    else:
-        while True:
-            done,barcodes,diffs=codebook_deduplication_iteration(barcodes, thre,diffs)
-            if done:
-                return barcodes
-
-def trivial_codebook_deduplication(cb):
+def codebook_deduplication(cb,thre=0,use_tqdm_notebook=False):
     R,C,J=cb.shape
-    cb=cb.reshape((R*C,-1)).T
+    cb=cb.reshape((R*C,-1))
 
-    cb1=[cb[0]]
-    for i in range(1,len(cb)):
-        newb=sp.spatial.distance.cdist([cb[i]],cb1)
-        if (newb>0).all():
-            cb1.append(cb[i])
-    return np.array(cb1).T.reshape((R,C,-1))
+    new_cbs=cb[:,[0]].copy()
+    for i in misc.maybe_tqdm(range(1,cb.shape[-1]),use_tqdm_notebook,leave=False):
+        dists=nan_robust_hamming(cb[:,[i]],new_cbs).ravel() # distance to existing codes
+        if (dists>thre).all():
+            new_cbs=np.concatenate([new_cbs,cb[:,[i]]],axis=1)
+        else:
+            best=np.argmin(dists)
+            new_cbs[:,best] = merge_barcodes(new_cbs[:,best],cb[:,i])
+    return new_cbs.reshape((R,C,-1))
 
 #################
 

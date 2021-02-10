@@ -16,9 +16,9 @@ def simulate_codebook(R,C,J):
 def mess_up_barcode(barcode,signal_range,per_frame_signal_range,dropout_probability):
     R,C=barcode.shape
     barcode=barcode.copy().astype(np.float64)
-    barcode[npr.rand()<.5]=0 # dropout
+    barcode[npr.rand(R,C)<dropout_probability]=0 # dropout
     barcode=barcode*(npr.rand()*(signal_range[1]-signal_range[0]) + signal_range[0])
-    barcode = barcode *(npr.rand(R,C)*(signal_range[1]-signal_range[0]) + signal_range[0])
+    barcode = barcode *(npr.rand(R,C)*(per_frame_signal_range[1]-per_frame_signal_range[0]) + per_frame_signal_range[0])
     return barcode
 
 def prepare_meshes_for_benchmark(meshlist,pitch,poisson_rate,num_workers=1,use_tqdm_notebook=False,
