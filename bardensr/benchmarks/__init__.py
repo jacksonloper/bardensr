@@ -8,6 +8,8 @@ import scipy.spatial
 from typing import Optional
 import tqdm
 import trimesh
+from .. import misc
+from . import simulations
 
 def locs_and_j_to_df(locs,j):
     return pd.DataFrame(dict(
@@ -17,8 +19,18 @@ def locs_and_j_to_df(locs,j):
         j=j
     ))
 
+def locsj_to_df(locsj):
+    return pd.DataFrame(dict(
+        m0=locsj[:,0],
+        m1=locsj[:,1],
+        m2=locsj[:,2],
+        j=locsj[:,3],
+    ))
+
 def df_to_locs_and_j(df):
     return np.array(df[['m0','m1','m2']]),np.array(df['j'])
+
+
 
 @dataclasses.dataclass
 class RolonyFPFNResult:
@@ -38,12 +50,18 @@ class BarcodePairing:
     def __post_init__(self):
         self.book1_lookup=collections.defaultdict(set)
         self.book2_lookup=collections.defaultdict(set)
-        for i,j in self.pairing_list:
-            self.book1_lookup[i].add(j)
-            self.book2_lookup[j].add(i)
 
-        self.book1_maps_unambiguously = (np.max([len(self.book1_lookup[j]) for j in self.book1_lookup])<=1)
-        self.book2_maps_unambiguously = (np.max([len(self.book2_lookup[j]) for j in self.book2_lookup])<=1)
+        if len(self.pairing_list)>0:
+
+            for i,j in self.pairing_list:
+                self.book1_lookup[i].add(j)
+                self.book2_lookup[j].add(i)
+
+            self.book1_maps_unambiguously = (np.max([len(self.book1_lookup[j]) for j in self.book1_lookup])<=1)
+            self.book2_maps_unambiguously = (np.max([len(self.book2_lookup[j]) for j in self.book2_lookup])<=1)
+        else:
+            self.book1_maps_unambiguously = True
+            self.book2_maps_unambiguously = True
 
 
 @dataclasses.dataclass
@@ -55,7 +73,7 @@ class BarcodeFPFNResult:
     barcode_pairing:BarcodePairing
 
     def __repr__(self):
-        return f'[barcode comparison: fdr={self.fdr*100:.1f}%, dr={self.dr*100:.1f}%]'
+        return f'[barcode comparison: fdr={self.fdr*100:04.1f}%, dr={self.dr*100:04.1f}%]'
 
 def codebook_comparison(codebook,other_codebook,tolerated_error=0,strict=False):
     '''
@@ -71,12 +89,7 @@ def codebook_comparison(codebook,other_codebook,tolerated_error=0,strict=False):
 
     codebook=codebook.astype(np.float)
     other_codebook=other_codebook.astype(np.float)
-    diffs = np.abs(codebook[:,:,:,None]-other_codebook[:,:,None,:])
-    if strict:
-        diffs[np.isnan(diffs)]=1
-    else:
-        diffs[np.isnan(diffs)]=0
-    dsts = np.sum(diffs,axis=(0,1)) # J1 x J2
+    dsts = misc.nan_robust_hamming(codebook.reshape((R*C,-1)),other_codebook.reshape((R*C,-1)))
 
     fp=np.sum(np.min(dsts,axis=0)>tolerated_error) # FP = none of our barcodes are within tolerated error of theirs
     fn=np.sum(np.min(dsts,axis=1)>tolerated_error) # FN = none of their barcodes are within tolerated error of ours

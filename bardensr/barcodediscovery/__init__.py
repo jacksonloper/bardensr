@@ -22,42 +22,17 @@ def merge_barcodes(A,B):
     B[np.isnan(B)]=A[np.isnan(B)] # but if B is ignorant, use info from A
     return B
 
-def nan_robust_hamming(A,B):
-    '''
-    Input:
-    - A (M x N1 )
-    - B (M x N2 )
-
-    Output
-    - diffs (N1 x N2)
-
-    diffs[i,j] = #{k: both A[i,k],B[i,k] are non-nan and A[i,k]!=B[i,k}
-    '''
-
-    M,N1=A.shape
-    M,N2=A.shape
-
-    differences=0
-
-    for m in range(M):
-        subdifferences = np.abs(A[m,None,:] - B[m,:,None]).astype(float) # N1 x N2
-
-        # if one of the barcodes says it doesn't know about one of the frames
-        # then we say that barcode doesnt disagree about that fram
-        subdifferences[np.isnan(subdifferences)]=0
-
-        # compute the total number of disagreements for each pair of barcodes
-        differences+=subdifferences # N1 x N2
-
-    return differences
-
 def codebook_deduplication(cb,thre=0,use_tqdm_notebook=False):
     R,C,J=cb.shape
+
+    if J==0:
+        return np.zeros((R,C,0),dtype=np.float)
+
     cb=cb.reshape((R*C,-1))
 
     new_cbs=cb[:,[0]].copy()
     for i in misc.maybe_tqdm(range(1,cb.shape[-1]),use_tqdm_notebook,leave=False):
-        dists=nan_robust_hamming(cb[:,[i]],new_cbs).ravel() # distance to existing codes
+        dists=misc.nan_robust_hamming(cb[:,[i]],new_cbs).ravel() # distance to existing codes
         if (dists>thre).all():
             new_cbs=np.concatenate([new_cbs,cb[:,[i]]],axis=1)
         else:
