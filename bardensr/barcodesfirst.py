@@ -13,6 +13,8 @@ def _build_density(Xshfl,codes,lowg):
 
 def build_density(Xsh,codebook,lowg_factor=.0005):
     # Xsh -- R,C,M0,M1,M2
+    codebook=codebook.copy()
+    codebook[np.isnan(codebook)]=0
     lowg=tf.convert_to_tensor(Xsh.max()*lowg_factor*np.prod(Xsh.shape[:2]))
     Xshfl=tf.convert_to_tensor(Xsh.reshape((-1,np.prod(Xsh.shape[-3:]))))
     codes=tf.convert_to_tensor(codebook.astype(np.float).reshape((-1,codebook.shape[-1])))

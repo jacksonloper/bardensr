@@ -64,7 +64,7 @@ def convert_codebook_to_onehot_form(codebook):
     '''
     J,R=codebook.shape
     C=codebook.max()+1
-    codes=np.eye(C,dtype=np.bool)
+    codes=np.eye(C,dtype=np.float)
     codes=np.concatenate([codes,np.full((1,C),np.nan)],axis=0)
     codebook=codes[codebook.ravel()].reshape((J,R,C))
     return np.transpose(codebook,[1,2,0])

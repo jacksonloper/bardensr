@@ -12,6 +12,27 @@ def savefig_PIL(format='png',bbox_inches='tight',**kwargs):
         s=f.read()
     return s
 
+def plot_roc_parametersweep(params,results,force_lim=True):
+    import dataclasses
+    with AnimAcross() as a:
+        for nm in dataclasses.fields(params[0]):
+            a(nm.name)
+
+            thisp=[getattr(x,nm.name) for x in params]
+            if isinstance(thisp[0],str) or isinstance(thisp[0],bool):
+                thisp=np.array(thisp)
+                opts=np.unique(thisp)
+                for opt in opts:
+                    plt.plot(np.array(results)[thisp==opt,0],np.array(results)[thisp==opt,1],'.',label=opt)
+                    plt.legend()
+            else:
+                a.cb(plt.scatter(np.array(results)[:,0],np.array(results)[:,1],c=thisp))
+            if force_lim:
+                plt.xlim(0,1)
+                plt.ylim(0,1)
+            plt.xlabel("FDR")
+            plt.ylabel("DR")
+
 def plotmesh(mesh,**kwargs):
     fig=plt.gcf()
     ax = fig.gca(projection='3d')
