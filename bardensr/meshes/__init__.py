@@ -8,6 +8,35 @@ import trimesh
 from concurrent.futures import ProcessPoolExecutor
 import bardensr.misc
 import tqdm.notebook
+from .. import misc
+
+
+import scipy.spatial
+
+
+def alpha_3d_shape(pointcloud,circumradius):
+    dl = sp.spatial.Delaunay(pointcloud)
+    s=dl.simplices
+    s=pointcloud[s]
+    circumcenters,sizes=misc.calc_circum(s)
+
+    # find out which simplices are good
+    good = sizes < circumradius
+
+    # get the good simplices
+    good_simplices=dl.simplices[good]
+
+    # turn them into faces
+    faces = np.stack([
+        good_simplices[:,[0,1,2]],
+        good_simplices[:,[0,3,1]],
+        good_simplices[:,[0,2,3]],
+        good_simplices[:,[1,3,2]],
+    ],axis=1)
+
+    # return mesh
+    return trimesh.Trimesh(pointcloud,faces.reshape((-1,3)))
+
 
 def dilate_fill(a):
     b = np.zeros_like(a)

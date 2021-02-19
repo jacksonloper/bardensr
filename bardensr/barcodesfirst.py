@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 
 
-@tf.function(autograph=False)
+@tf.function
 def _build_density(Xshfl,codes,lowg):
     nrms=tf.math.sqrt(tf.reduce_sum(Xshfl**2,axis=0,keepdims=True))
     Xshfl=Xshfl/(lowg+nrms)
@@ -11,11 +11,15 @@ def _build_density(Xshfl,codes,lowg):
     dots=tf.transpose(Xshfl)@codes
     return dots
 
-def build_density(Xsh,codebook,lowg_factor=.0005):
+def build_density(Xsh,codebook,lowg_factor=.0005,lowg_constant=None):
     # Xsh -- R,C,M0,M1,M2
+
+    if lowg_constant is None:
+        lowg_constant = float(Xsh.max()*lowg_factor*np.prod(Xsh.shape[:2]))
+
     codebook=codebook.copy()
     codebook[np.isnan(codebook)]=0
-    lowg=tf.convert_to_tensor(Xsh.max()*lowg_factor*np.prod(Xsh.shape[:2]))
+    lowg=tf.convert_to_tensor(lowg_constant)
     Xshfl=tf.convert_to_tensor(Xsh.reshape((-1,np.prod(Xsh.shape[-3:]))))
     codes=tf.convert_to_tensor(codebook.astype(np.float).reshape((-1,codebook.shape[-1])))
     dots=_build_density(Xshfl,codes,lowg).numpy()

@@ -2,15 +2,36 @@ import matplotlib.pylab as plt
 import numpy as np
 from . import rectangles
 import io
+from . import misc
+import subprocess
+from contextlib import contextmanager
 
 from mpl_toolkits.mplot3d import Axes3D
 
 def savefig_PIL(format='png',bbox_inches='tight',**kwargs):
     with io.BytesIO() as f:
-        plt.savefig(f,format=format,bbox_inches=bbox_inches,**kwargs)
+        plt.gcf().savefig(f,format=format,bbox_inches=bbox_inches,**kwargs)
         f.seek(0)
         s=f.read()
     return s
+
+
+@contextmanager
+def pngs_to_mp4_async(fn):
+    import ffmpeg
+    args = (
+        ffmpeg
+        .input('pipe:', vcodec='png')
+        .output('/home/jovyan/work/Downloads/foo.mp4', pix_fmt='yuv420p')
+        .overwrite_output()
+        .compile()
+    )
+    with subprocess.Popen(args, stdin=subprocess.PIPE) as proc:
+        yield proc
+
+        proc.stdin.close()
+        proc.wait()
+
 
 def plot_roc_parametersweep(params,results,force_lim=True):
     import dataclasses
@@ -40,6 +61,27 @@ def plotmesh(mesh,**kwargs):
                     **kwargs)
 
 
+def df_to_voxeltensor(shape,df,dilation=0,use_tqdm_notebook=False):
+    result=np.full(shape,-1,dtype=np.int)
+    for j in misc.maybe_tqdm(np.unique(df['j']),use_tqdm_notebook):
+        good=df['j']==j
+        sublocs=np.array(df[good][['m0','m1','m2']])
+        if dilation>0:
+            thison=np.zeros(shape,dtype=np.bool)
+            thison[sublocs[:,0],sublocs[:,1],sublocs[:,2]]=True
+            thison=sp.ndimage.binary_dilation(thison,iterations=dilation)
+            result[thison]=j
+        else:
+            result[sublocs[:,0],sublocs[:,1],sublocs[:,2]]=j
+    return result
+
+def label_density(density,thresh=np.inf):
+    result=np.argmax(density,axis=-1)
+    result_values=np.max(density,axis=-1)
+    bad=result_values<thresh
+    result[bad]=-1
+    return result
+
 def meanmin_plot(E1,E2,unmatched,legend=True):
     srt=np.argsort(E1)
 
@@ -68,6 +110,8 @@ def meanmin_plot(E1,E2,unmatched,legend=True):
         plt.legend()
     plt.ylabel("meannmin divergences")
     plt.axhline(0)
+
+    return srt
 
 def foc3(ctr,radius):
     plt.gca().set_xlim3d(ctr[0]-radius,ctr[0]+radius)
@@ -317,14 +361,15 @@ class AnimAcross:
                 rows=len(self.axes_list)//cols + 1
             dims=(rows,cols)
 
-        plt.gcf().set_size_inches(self.sz,self.sz*self.asp)
         k=0
 
         for j in range(dims[0]):
             for i in range(dims[1]):
                 if k<len(self.axes_list):
-                    self.axes_list[k].set_position((i,dims[0]-j,self.ratio,self.ratio))
+                    self.axes_list[k].set_position((i,dims[0]-j-1,self.ratio,self.ratio))
                 k=k+1
+
+        plt.gcf().set_size_inches(self.sz,self.sz*self.asp)
 
         for i in range(len(self.axes_list)):
             if i in self.cbs:
