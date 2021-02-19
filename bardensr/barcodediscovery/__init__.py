@@ -22,7 +22,7 @@ def merge_barcodes(A,B):
     B[np.isnan(B)]=A[np.isnan(B)] # but if B is ignorant, use info from A
     return B
 
-def codebook_deduplication(cb,thre=0,use_tqdm_notebook=False):
+def codebook_deduplication_iteration(cb,thre=0,use_tqdm_notebook=False):
     R,C,J=cb.shape
 
     if J==0:
@@ -40,10 +40,28 @@ def codebook_deduplication(cb,thre=0,use_tqdm_notebook=False):
             new_cbs[:,best] = merge_barcodes(new_cbs[:,best],cb[:,i])
     return new_cbs.reshape((R,C,-1))
 
+def codebook_deduplication(cb,thre=0,use_tqdm_notebook=True):
+    R,C,J=cb.shape
+    improved=True
+    while improved:
+        cb=codebook_deduplication_iteration(cb,thre,use_tqdm_notebook)
+        if cb.shape[-1]<J:
+            improved=True
+            J=cb.shape[-1]
+        else:
+            improved=False
+    return cb
+
+def merge_codebooks(book1,book2,thre=0,use_tqdm_notebook=False):
+    book=np.concatenate([book1,book2],axis=-1)
+    book=codebook_deduplication(
+        book,thre=thre,use_tqdm_notebook=use_tqdm_notebook)
+    return book
+
 #################
 
 
-def get_denselearner_reconstruction(X,codebook,blob_radius,blur_level=0,
+def get_denselearner_reconstruction(X,codebook,blob_radius=None,blur_level=0,
                 n_unused_barcodes=2,bardensr_spot_thresh_multiplier=1.0,niter=120,lam=.01):
     # add extra barcodes
     R,C,J=codebook.shape
@@ -55,20 +73,24 @@ def get_denselearner_reconstruction(X,codebook,blob_radius,blur_level=0,
     bdresult=singlefov.denselearner.build_density(X,estimated_plus_phony,use_tqdm_notebook=True,
                                                           niter=niter,lam=lam,blur_level=blur_level)
 
-    # get spots we consider "good enough", use this to form a mask
-    thresh=bdresult.density[:,:,:,-n_unused_barcodes:].max()*bardensr_spot_thresh_multiplier
-    mask=bdresult.density>thresh
-
-    # dilate the mask
-    newmask=[]
-    for j in range(mask.shape[-1]):
-        m=ellipsoid_dilation(mask[:,:,:,j],(0,blob_radius,blob_radius))
-        newmask.append(m)
-    newmask=np.stack(newmask,axis=-1)
-
-    # get the residual
+    # get the reconstruction
     RD=bdresult.reconstruction_density.copy()
-    RD[~newmask]=0
+
+    # optionally mask out Fs which are below some threshold (lam OUGHT to do this, but... yknow...)
+    if blob_radius is not None:
+        # get spots we consider "good enough", use this to form a mask
+        thresh=bdresult.density[:,:,:,-n_unused_barcodes:].max()*bardensr_spot_thresh_multiplier
+        mask=bdresult.density>thresh
+
+        # dilate the mask
+        newmask=[]
+        for j in range(mask.shape[-1]):
+            m=ellipsoid_dilation(mask[:,:,:,j],blob_radius)
+            newmask.append(m)
+        newmask=np.stack(newmask,axis=-1)
+        RD[~newmask]=0
+
+    # done!
     recon = np.einsum('xyzj,rcj->rcxyz',RD,bdresult.reconstruction_codebook)
 
     return recon
@@ -356,7 +378,8 @@ def seek_barcodes_vectorized(X,
     good_channels=np.argmax(V, axis = 2) # n_patches x R
 
     # create putative barcodes based on those channels
-    codebook = misc.convert_codebook_to_onehot_form(good_channels) # R x C x J
+    codebook = misc.convert_codebook_to_onehot_form(good_channels) # R x C x J, floating point
+    codebook_binary = codebook>0
 
     # in some rounds there may not be
     # sufficient evidence about which channel ought to
@@ -383,7 +406,7 @@ def seek_barcodes_vectorized(X,
 
     # now restrict our attention to the relevant channels
     patches_limited=np.array([
-            patches[j][codebook[:,:,j].ravel()]
+            patches[j][codebook_binary[:,:,j].ravel()]
         for j in range(len(patches))
     ]) # batch x R x M0 x M1 x M2
 

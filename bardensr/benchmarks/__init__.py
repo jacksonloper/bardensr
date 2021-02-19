@@ -71,9 +71,10 @@ class BarcodeFPFNResult:
     fdr:float
     dr:float
     barcode_pairing:BarcodePairing
+    true_detects:int
 
     def __repr__(self):
-        return f'[barcode comparison: fdr={self.fdr*100:04.1f}%, dr={self.dr*100:04.1f}%]'
+        return f'[barcode comparison: false positives={self.fp}, dr={self.dr*100:04.1f} ({self.true_detects} detects)%]'
 
 def codebook_comparison(codebook,other_codebook,tolerated_error=0,strict=False):
     '''
@@ -97,18 +98,13 @@ def codebook_comparison(codebook,other_codebook,tolerated_error=0,strict=False):
     fdr=fp/other_codebook.shape[-1]
     dr=1.0 - (fn/codebook.shape[-1])
 
-    # get a pairing -- for each of entries in the codebook, find (at least one!) entry in other_codebook
-    idx1=[]
-    idx2=[]
-    for i in range(dsts.shape[0]):  # == range(J1)
-        best=np.argmin(dsts[i])
-        if dsts[i,best]<=tolerated_error:
-            idx1.append(i)
-            idx2.append(best)
+    true_detects = codebook.shape[-1] - fn
+
+    idx1,idx2=np.where(dsts<=tolerated_error)
 
     barcode_pairing=BarcodePairing(np.c_[idx1,idx2])
 
-    return BarcodeFPFNResult(fn,fp,fdr,dr,barcode_pairing)
+    return BarcodeFPFNResult(fn,fp,fdr,dr,barcode_pairing,true_detects)
 
 def meanmin_divergence(u,v):
     '''
@@ -252,7 +248,7 @@ class Benchmark:
             rolonies
         )
 
-    def voxel_meanmin_divergences(self,df,barcode_pairing=None):
+    def voxel_meanmin_divergences(self,df,barcode_pairing=None,use_tqdm_notebook=False):
         '''
         Input:
         - df, a dataframe of rolonies
@@ -270,7 +266,7 @@ class Benchmark:
         if barcode_pairing is not None:
             assert barcode_pairing.book2_maps_unambiguously,"some of the df barcodes are mapped to more than one of our barcodes!"
 
-        for j in range(self.n_genes):
+        for j in misc.maybe_trange(self.n_genes,use_tqdm_notebook):
             l1=self.GT_voxels[self.GT_voxels['j']==j][['m0','m1','m2']]
 
             if barcode_pairing is not None:

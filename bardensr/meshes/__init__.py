@@ -8,6 +8,59 @@ import trimesh
 from concurrent.futures import ProcessPoolExecutor
 import bardensr.misc
 import tqdm.notebook
+from .. import misc
+
+
+import scipy.spatial
+
+
+def alpha_3d_shape(pointcloud,circumradius):
+    dl = sp.spatial.Delaunay(pointcloud)
+    s=dl.simplices
+    s=pointcloud[s]
+    circumcenters,sizes=misc.calc_circum(s)
+
+    # find out which simplices are good
+    good = sizes < circumradius
+
+    # get the good simplices
+    good_simplices=dl.simplices[good]
+
+    # turn them into faces
+    faces = np.stack([
+        good_simplices[:,[0,1,2]],
+        good_simplices[:,[0,3,1]],
+        good_simplices[:,[0,2,3]],
+        good_simplices[:,[1,3,2]],
+    ],axis=1)
+
+    # figure out signs of faces
+    simplex_centers = np.mean(pointcloud[good_simplices], axis=1)  # get centers
+
+    # normals according to winding
+    simplex_centers = np.mean(pointcloud[good_simplices], axis=1)
+    face_centers = np.mean(pointcloud[faces], axis=-2)
+    s2f = simplex_centers[:, None, :] - face_centers
+    A = pointcloud[faces[:, :, 0]]-pointcloud[faces[:, :, 1]]
+    B = pointcloud[faces[:, :, 0]]-pointcloud[faces[:, :, 2]]
+    normals = np.cross(A, B)
+    signs = np.sum(normals*s2f, axis=-1)
+
+    # fix as necessary
+    faces_reversed = faces[:, :, ::-1]
+    faces[signs > 0] = faces_reversed[signs > 0]
+
+    # concatenate
+    faces=np.concatenate(faces,axis=0)
+
+    # remove doublefaces
+    unq,cts=np.unique(faces,axis=0,return_counts=True)
+    faces=unq[cts==1]
+
+    mesh=trimesh.Trimesh(pointcloud,faces)
+    print(mesh.faces.max(),mesh.vertices.shape)
+    return mesh
+
 
 def dilate_fill(a):
     b = np.zeros_like(a)

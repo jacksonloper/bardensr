@@ -4,6 +4,42 @@ def argmax_nd(x):
     return np.unravel_index(np.argmax(x),x.shape)
 
 
+def calc_circum(V):
+    '''
+    input
+    * V -- (batch x (d+1) x d) -- a simplex
+    
+    Output
+    * circumcenters -- (batch,d)
+    * circumradii -- (batch)
+    '''
+    
+    '''
+    Let
+    
+        diff = V[i,j1] - V[i,j2]
+        diff = diff/np.linalg.norm(diff)
+    
+    Then circumcenter[i] must satisfy
+    
+        np.sum(circumcenter[i]*diff) == .5*np.sum(diff*(V[i,j1]+V[i,j2]))
+    
+    This forms a system we can work with to compute circumcenters
+    and circumradii.
+    '''
+    
+    directions = V[:,[0]] - V[:,1:]  # batch x d x d
+    avgs = .5*(V[:,[0]] + V[:,1:]) # batch x d x d
+    directions = directions / np.linalg.norm(directions,keepdims=True,axis=-1) # batch x d x d
+    
+    beta = np.sum(avgs*directions,axis=-1)
+    
+    circumcenters = np.linalg.solve(directions,beta) # batch x d
+    circumradii = np.linalg.norm(circumcenters - V[:,0],axis=-1)
+    
+    return circumcenters,circumradii
+    
+
 def nan_robust_hamming(A,B):
     '''
     Input:
@@ -64,7 +100,7 @@ def convert_codebook_to_onehot_form(codebook):
     '''
     J,R=codebook.shape
     C=codebook.max()+1
-    codes=np.eye(C,dtype=np.bool)
+    codes=np.eye(C,dtype=np.float)
     codes=np.concatenate([codes,np.full((1,C),np.nan)],axis=0)
     codebook=codes[codebook.ravel()].reshape((J,R,C))
     return np.transpose(codebook,[1,2,0])
