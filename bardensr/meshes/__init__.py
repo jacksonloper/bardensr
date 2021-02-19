@@ -34,8 +34,32 @@ def alpha_3d_shape(pointcloud,circumradius):
         good_simplices[:,[1,3,2]],
     ],axis=1)
 
-    # return mesh
-    return trimesh.Trimesh(pointcloud,faces.reshape((-1,3)))
+    # figure out signs of faces
+    simplex_centers = np.mean(pointcloud[good_simplices], axis=1)  # get centers
+
+    # normals according to winding
+    simplex_centers = np.mean(pointcloud[good_simplices], axis=1)
+    face_centers = np.mean(pointcloud[faces], axis=-2)
+    s2f = simplex_centers[:, None, :] - face_centers
+    A = pointcloud[faces[:, :, 0]]-pointcloud[faces[:, :, 1]]
+    B = pointcloud[faces[:, :, 0]]-pointcloud[faces[:, :, 2]]
+    normals = np.cross(A, B)
+    signs = np.sum(normals*s2f, axis=-1)
+
+    # fix as necessary
+    faces_reversed = faces[:, :, ::-1]
+    faces[signs > 0] = faces_reversed[signs > 0]
+
+    # concatenate
+    faces=np.concatenate(faces,axis=0)
+
+    # remove doublefaces
+    unq,cts=np.unique(faces,axis=0,return_counts=True)
+    faces=unq[cts==1]
+
+    mesh=trimesh.Trimesh(pointcloud,faces)
+    print(mesh.faces.max(),mesh.vertices.shape)
+    return mesh
 
 
 def dilate_fill(a):
