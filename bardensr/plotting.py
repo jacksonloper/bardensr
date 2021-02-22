@@ -15,6 +15,26 @@ def savefig_PIL(format='png',bbox_inches='tight',**kwargs):
         s=f.read()
     return s
 
+def labelcolor(X,max):
+    '''
+    Input
+    - X, integer values, -1 means off
+    - max, maximum value
+
+    Output
+    - Y
+
+    for each i:
+        if X[i]==-1:
+            Y[i]=0
+        else
+            Y[i]=X[i]%(max-1)+1
+    '''
+
+    neg=(X==-1)
+    X=X%(max-1)+1
+    X[neg]=0
+    return X
 
 @contextmanager
 def pngs_to_mp4_async(fn):
