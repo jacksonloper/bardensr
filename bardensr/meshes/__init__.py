@@ -9,12 +9,16 @@ from concurrent.futures import ProcessPoolExecutor
 import bardensr.misc
 import tqdm.notebook
 from .. import misc
+import numpy.random as npr
 
 
 import scipy.spatial
 
 
-def alpha_3d_shape(pointcloud,circumradius):
+def alpha_3d_shape(pointcloud,circumradius,perturbfactor=1e-10):
+    perturb=np.ptp(pointcloud)*perturbfactor
+    pointcloud=pointcloud+(npr.rand(*pointcloud.shape)-.5)*perturb
+
     dl = sp.spatial.Delaunay(pointcloud)
     s=dl.simplices
     s=pointcloud[s]
@@ -58,7 +62,6 @@ def alpha_3d_shape(pointcloud,circumradius):
     faces=unq[cts==1]
 
     mesh=trimesh.Trimesh(pointcloud,faces)
-    print(mesh.faces.max(),mesh.vertices.shape)
     return mesh
 
 
