@@ -26,7 +26,7 @@ def build_density(Xsh,codebook,lowg_factor=.0005,lowg_constant=None,double_preci
 
     codebook=codebook.copy()
     codebook[np.isnan(codebook)]=0
-    lowg=tf.convert_to_tensor(lowg_constant)
+    lowg=tf.convert_to_tensor(lowg_constant,dtype=dtype)
     Xshfl=tf.convert_to_tensor(Xsh.reshape((-1,np.prod(Xsh.shape[-3:]))),dtype=dtype)
     codes=tf.convert_to_tensor(codebook.reshape((-1,codebook.shape[-1])),dtype=dtype)
     dots=_build_density(Xshfl,codes,lowg).numpy()
