@@ -4,6 +4,7 @@ import numpy.random as npr
 import pandas as pd
 import scipy as sp
 from .. import meshes
+from . import locsdf
 
 import logging
 
@@ -24,8 +25,7 @@ def mess_up_barcode(barcode,signal_range, per_frame_signal_range,
         barcode[DO_r] *= dropout_intensity
     return barcode
 
-def prepare_meshes_for_benchmark(meshlist,pitch,poisson_rate,num_workers=1,use_tqdm_notebook=False,
-                                                    maxout_count=np.inf):
+def prepare_meshes_for_benchmark(meshlist,pitch,poisson_rate,num_workers=1,use_tqdm_notebook=False):
     '''
     Moves meshes into a new coordinate system, voxelizes them
     in that coordinate system, and generates rolonies inside
@@ -59,12 +59,18 @@ def prepare_meshes_for_benchmark(meshlist,pitch,poisson_rate,num_workers=1,use_t
 
     import trimesh
 
+    #########################################
+    # voxelize!
+
+    # translate meshes to a reference frame where one voxel = one unit
     translation=np.min([np.min(x.vertices,axis=0) for x in meshlist],axis=0)
     new_meshes=[trimesh.Trimesh((x.vertices-translation[None,:])/pitch,x.faces) for x in meshlist]
 
+    # do the voxelation
     voxel_lists=meshes.voxelize_meshlist_interiors(new_meshes,pitch=1.0,
                             num_workers=num_workers,use_tqdm_notebook=use_tqdm_notebook)
 
+    # record the locations as a single big dataframe
     locations=[x.astype(np.int) for x in voxel_lists]
     locations=[np.c_[x,np.full(len(x),i)] for i,x in enumerate(locations)]
     locations=np.concatenate(locations,axis=0)
@@ -75,18 +81,40 @@ def prepare_meshes_for_benchmark(meshlist,pitch,poisson_rate,num_workers=1,use_t
         j=locations[:,3],
     ))
 
-    counts=npr.poisson(poisson_rate*(pitch*pitch*pitch),size=len(locations))
-    if maxout_count is not np.inf:
-        counts[counts>maxout_count]=maxout_count
-    locations2=np.repeat(locations,counts,axis=0)
+    #########################################
+    # sample transcripts inside the voxels
+    # this is tricky because in some cases multiple
+    # neurons inhabit the same voxel.  in this case
+    # we assume each neuron occupies an equal proportion
+
+    # get a list of all locations in GT voxels
+    # note that locs are not unique, i.e. we may have locs[3]==locs[4]
+    # as long as js[3]!=js[4].  
+    locs, js = locsdf.df_to_locs_and_j(GT_voxels)
+
+    # for each (nonunique!) location
+    # compute how many total neurons inhabit that voxel
+    locs_unique, idx, cts = np.unique(
+        locs, axis=0, return_inverse=True, return_counts=True)
+    inhabitants = cts[idx] # for each entry in GT_voxels
+
+    # for each (nonunique!) location,
+    # sample poisson, with rate inversely proportional
+    # to number of inhabiting neurons
+    counts = npr.poisson(poisson_rate*(pitch*pitch*pitch)/inhabitants)
+
+    # create final tally
+    locs_repeated=np.repeat(locs,counts,axis=0)
+    js_repeated=np.repeat(js,counts,axis=0)
     rolonies=pd.DataFrame(dict(
-        m0=locations2[:,0],
-        m1=locations2[:,1],
-        m2=locations2[:,2],
-        j=locations2[:,3],
+        m0=locs_repeated[:,0],
+        m1=locs_repeated[:,1],
+        m2=locs_repeated[:,2],
+        j=js_repeated,
     ))
 
-    return new_meshes,GT_voxels,rolonies,translation
+    #########################################
+    return new_meshes,GT_voxels,rolonies
 
 def simulate_imagestack(rolonies,codebook,
                 dropout_probability=0.0,

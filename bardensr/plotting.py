@@ -228,40 +228,27 @@ def focpt(m1,m2,bc,radius=10,j=None,X=None,**kwargs):
     plot_rbc(R,C,go,**kwargs)
 
 def lutup(A,B,C,D,sc=.5,normeach=False):
-    A=A.copy()
-    B=B.copy()
-    C=C.copy()
-    D=D.copy()
+    data=np.stack([A,B,C,D],axis=0).astype(float)
+
     if normeach:
-        for x in [A,B,C,D]:
-            x[:]=x[:]-np.min(x[:])
-            x[:]=x[:]/np.max(x[:])
+        other_axes = tuple(range(1, len(data.shape)))
+        data-=np.min(data,axis=other_axes,keepdims=True)
+        data/=np.max(data,axis=other_axes,keepdims=True)
     else:
-        mn=np.inf
-        for x in [A,B,C,D]:
-            mn=np.min([mn,np.min(x)])
-        for x in [A,B,C,D]:
-            x[:]=x-mn
-        mx=-np.inf
-        for x in [A,B,C,D]:
-            mx=np.max([mx,np.max(x)])
-        for x in [A,B,C,D]:
-            x[:]=x/mx
+        data-=np.min(data)
+        data/=np.max(data)
+
     colors=np.array([
         [1,2,4],  # BLUE!
         [1,4,2],  # GREEN!
         [3,3,1],  # YELLOWY!
         [4,2,1],  # RED!
     ])*sc
-    rez=np.zeros(A.shape+(3,))
-    rez=rez+A[:,:,None]*colors[0][None,None,:]
-    rez=rez+B[:,:,None]*colors[1][None,None,:]
-    rez=rez+C[:,:,None]*colors[2][None,None,:]
-    rez=rez+D[:,:,None]*colors[3][None,None,:]
+
+    rez = np.einsum('l...,l...c->...c',data,colors)
     rez=np.clip(rez,0,1)
     rez=(rez*255).astype(np.uint8)
     return rez
-
 
 def gify(X,sc=.5,normeach=False):
     import PIL

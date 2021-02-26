@@ -10,27 +10,7 @@ import tqdm
 import trimesh
 from .. import misc
 from . import simulations
-
-def locs_and_j_to_df(locs,j):
-    return pd.DataFrame(dict(
-        m0=locs[:,0],
-        m1=locs[:,1],
-        m2=locs[:,2],
-        j=j
-    ))
-
-def locsj_to_df(locsj):
-    return pd.DataFrame(dict(
-        m0=locsj[:,0],
-        m1=locsj[:,1],
-        m2=locsj[:,2],
-        j=locsj[:,3],
-    ))
-
-def df_to_locs_and_j(df):
-    return np.array(df[['m0','m1','m2']]),np.array(df['j'])
-
-
+from . import locsdf
 
 @dataclasses.dataclass
 class RolonyFPFNResult:
@@ -287,7 +267,7 @@ class Benchmark:
 
     def rolony_fpfn(self,df,radius,good_subset=None):
         if len(df)==0:
-            noro=locs_and_j_to_df(
+            noro=locsdf.locs_and_j_to_df(
                 np.zeros((0,3),dtype=np.int),
                 np.zeros(0,dtype=np.int),
             ),
@@ -344,15 +324,15 @@ class Benchmark:
             fp=spots_they_made_up,
             fn_indices=np.where(goodies)[0][missing_goodies], # fn_indices[3] says which benchmark spot we failed at
             fp_indices=np.where(fantasized_bad)[0],
-            fn_rolonies=_locs_and_j_to_df(
+            fn_rolonies=locsdf.locs_and_j_to_df(
                 good_locs[missing_goodies],
                 good_j[missing_goodies]
             ),
-            fp_rolonies=_locs_and_j_to_df(
+            fp_rolonies=locsdf.locs_and_j_to_df(
                 their_locs[fantasized_bad],
                 their_j[fantasized_bad],
             ),
-            agreement_rolonies = _locs_and_j_to_df(
+            agreement_rolonies=locsdf.locs_and_j_to_df(
                 their_locs[~fantasized_bad],
                 their_j[~fantasized_bad],
             )

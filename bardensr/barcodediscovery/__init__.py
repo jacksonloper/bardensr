@@ -53,6 +53,9 @@ def codebook_deduplication(cb,thre=0,use_tqdm_notebook=True):
     return cb
 
 def merge_codebooks(book1,book2,thre=0,use_tqdm_notebook=False):
+    '''
+    TODO: use ratios if you have them?
+    '''
     book=np.concatenate([book1,book2],axis=-1)
     book=codebook_deduplication(
         book,thre=thre,use_tqdm_notebook=use_tqdm_notebook)
