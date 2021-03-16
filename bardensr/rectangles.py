@@ -11,6 +11,24 @@ def rectangle_intersection(st1,en1,st2,en2):
     else:
         return True,st,en
 
+def pointcloud_in_box_test(pts,st,en):
+    '''
+    Input
+    - st n-tensor
+    - en n-tensor
+    - pts (batch x n)
+
+    Output: boolean indicating which pts fall inside box defined by
+    
+        prod_i [st[i],en[i]) 
+    '''
+
+    ndim=len(st)
+
+    good = True
+    for i,(st,en) in enumerate(zip(st,en)):
+        good &= (pts[:, i] >= st) & (pts[:, i] <en)
+    return good
 
 def rect2slice(st,en,integerify=True):
     if integerify:
@@ -26,7 +44,7 @@ def slice2rect(*slices):
         st.append(x.start)
         en.append(x.stop)
 
-    return st,en
+    return np.array(st),np.array(en)
 
 def sliceit0(F,st2,en2,fill_value=0.0):
     '''
@@ -51,6 +69,20 @@ def scatter_ignoreoob(base,indices,values):
     shp=np.array(base.shape)
     good = (indices>=0).all(axis=1) & (indices<shp[None,:]).all(axis=1)
     base[tuple(indices[good].T)]=values[good]
+
+def fill_ignoreoob(base, indices, value):
+    '''
+    Input:
+    - base, an array (M0 x M1 x M2...Mn)
+    - indices, an array (S x n)
+    - value
+
+    Sets base[indices[i]]=value, but if indices[i] is oob it is ignored
+    '''
+
+    shp = np.array(base.shape)
+    good = (indices >= 0).all(axis=1) & (indices < shp[None, :]).all(axis=1)
+    base[tuple(indices[good].T)] = value
 
 def sliceit(F,st1,st2,en2,fill_value=0.0):
     '''

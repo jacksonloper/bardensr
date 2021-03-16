@@ -3,7 +3,6 @@ import numpy as np
 def argmax_nd(x):
     return np.unravel_index(np.argmax(x),x.shape)
 
-
 def calc_circum(V):
     '''
     input
