@@ -1,4 +1,5 @@
 import numpy as np
+import operator
 
 def rectangle_intersection(st1,en1,st2,en2):
     st=np.array([st1,st2]).max(axis=0)
@@ -11,23 +12,37 @@ def rectangle_intersection(st1,en1,st2,en2):
     else:
         return True,st,en
 
-def pointcloud_in_box_test(pts,st,en):
+def pointcloud_in_box_test(pts,st,en,left_closed=True,right_closed=False):
     '''
     Input
     - st n-tensor
     - en n-tensor
     - pts (batch x n)
+    - left_closed = True
+    - right_closed = False
 
     Output: boolean indicating which pts fall inside box defined by
-    
-        prod_i [st[i],en[i]) 
+
+        prod_i [st[i],en[i])
+
+    left_closed and right_closed control the kinds of intervals considered, i.e.
+
+    True,False  --> prod_i [st[i],en[i])
+    True,True   --> prod_i [st[i],en[i]]
+    False,False --> prod_i (st[i],en[i])
+    False,True  --> prod_i (st[i],en[i]]
     '''
 
     ndim=len(st)
 
+    c1=operator.le if left_closed else operator.lt
+    c2=operator.le if right_closed else operator.lt
+
+    pts=np.require(pts)
+
     good = True
     for i,(st,en) in enumerate(zip(st,en)):
-        good &= (pts[:, i] >= st) & (pts[:, i] <en)
+        good &= c1(st,pts[:, i]) & c2(pts[:,i],en)
     return good
 
 def rect2slice(st,en,integerify=True):
