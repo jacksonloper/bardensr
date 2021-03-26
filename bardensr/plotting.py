@@ -5,6 +5,7 @@ import io
 from . import misc
 import subprocess
 from contextlib import contextmanager
+import IPython.display
 
 from mpl_toolkits.mplot3d import Axes3D
 
@@ -14,6 +15,29 @@ def savefig_PIL(format='png',bbox_inches='tight',**kwargs):
         f.seek(0)
         s=f.read()
     return s
+
+class AnimGif:
+    def __init__(self,format='png',bbox_inches='tight',duration=250):
+        self.imgs=[]
+        self.format=format
+        self.bbox_inches=bbox_inches
+        self.duration=duration
+
+    def __call__(self,**kwargs):
+        self.imgs.append(
+            savefig_PIL(format=self.format,bbox_inches=self.bbox_inches,**kwargs)
+        )
+        plt.clf()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self,exc_type,exc_val,exc_tb):
+        plt.clf()
+        self.gif=gif_from_pngs(self.imgs,duration=self.duration)
+
+    def __invert__(self):
+        return IPython.display.Image(self.gif)
 
 def labelcolor(X,max):
     '''
