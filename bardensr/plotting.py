@@ -42,7 +42,7 @@ def pngs_to_mp4_async(fn):
     args = (
         ffmpeg
         .input('pipe:', vcodec='png')
-        .output('/home/jovyan/work/Downloads/foo.mp4', pix_fmt='yuv420p')
+        .output(fn, pix_fmt='yuv420p')
         .overwrite_output()
         .compile()
     )
@@ -227,14 +227,14 @@ def focpt(m1,m2,bc,radius=10,j=None,X=None,**kwargs):
 
     plot_rbc(R,C,go,**kwargs)
 
-def lutup(A,B,C,D,sc=.5,normeach=False):
+def lutup(A,B,C,D,sc=.5,normstyle='each'):
     data=np.stack([A,B,C,D],axis=0).astype(float)
 
-    if normeach:
+    if normstyle=='each':
         other_axes = tuple(range(1, len(data.shape)))
         data-=np.min(data,axis=other_axes,keepdims=True)
         data/=np.max(data,axis=other_axes,keepdims=True)
-    else:
+    elif normstyle=='all':
         data-=np.min(data)
         data/=np.max(data)
 
@@ -250,14 +250,14 @@ def lutup(A,B,C,D,sc=.5,normeach=False):
     rez=(rez*255).astype(np.uint8)
     return rez
 
-def gify(X,sc=.5,normeach=False):
+def gify(X,sc=.5,normeach=False,duration=250):
     import PIL
     import io
     imgs=[lutup(*x,sc=sc,normeach=normeach) for x in X]
     imgs=[PIL.Image.fromarray(x) for x in imgs]
     with io.BytesIO() as f:
         imgs[0].save(f,save_all=True,append_images=imgs[1:],
-                duration=250,loop=0,format='gif')
+                duration=duration,loop=0,format='gif')
         f.seek(0)
         s=f.read()
     return s

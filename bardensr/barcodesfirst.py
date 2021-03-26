@@ -11,6 +11,14 @@ def _build_density(Xshfl,codes,lowg):
     dots=tf.transpose(Xshfl)@codes
     return dots
 
+def build_density_from_tf(Xsh,codebook,lowg_constant):
+    R,C,M0,M1,M2=Xsh.shape
+    R,C,J=codebook.shape
+    Xshfl=tf.reshape(Xsh,(R*C,M0*M1*M2))
+    codebook=tf.reshape(codebook,(R*C,J))
+    dots = _build_density(Xshfl,codebook,lowg_constant)
+    return tf.reshape(dots,(M0,M1,M2,J))
+
 def build_density(Xsh,codebook,lowg_factor=.0005,lowg_constant=None,double_precision=False):
     # Xsh -- R,C,M0,M1,M2
 
@@ -55,7 +63,7 @@ def sharpen(densities,sharpening,sigma):
     sh=_sharpen(densities,sharpening,filter).numpy()[...,0]
     return sh
 
-@tf.function(autograph=False)
+@tf.function
 def _peak_call(densities,poolsize,thresh):
     densities=tf.transpose(densities,[3,0,1,2])[...,None] # J X M0 x M1 X M2 x 1
     mp=tf.nn.max_pool(densities,poolsize,1,'SAME')
