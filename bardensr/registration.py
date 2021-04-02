@@ -152,10 +152,11 @@ def register(mini,codebook,zero_padding=(0,0,0),
     ssq=tf.reduce_sum(minitf**2)
 
     # set up tf variables we need
-    t=tf.Variable(np.zeros((R*C,3),dtype=np.float32))
+    zero_padding=np.require(zero_padding,dtype=np.int32)
+    t=tf.Variable(np.zeros((R*C,3))-zero_padding)
 
     # this is how much we'll pad inside the translation functions
-    sz=np.require(mini.shape[2:],dtype=np.int32)+np.require(zero_padding)
+    sz=np.require(mini.shape[2:],dtype=np.int32)+zero_padding*2
     sz=tf.convert_to_tensor(sz,dtype=tf.int32)
 
     # compute learning rate so that the first step the
