@@ -34,6 +34,9 @@ class ConvAndTransposeNet(tf.Module):
         ...
         --> convT(kernelsizes[0],strides[0],channels[0])
 
+        Second network also gets passthroughs from
+        the first network
+
         '''
 
         super().__init__(name=name)
@@ -48,11 +51,15 @@ class ConvAndTransposeNet(tf.Module):
             self.fwd_layers.append(FullSpecConv(ci,co,k))
             self.fwd_biases.append(tf.Variable(tf.zeros(co),name=f'fb{i}'))
 
+
+        self.matmul_variables=[]
         self.reverse_layers=[]
         self.reverse_biases=[]
         for i,(k,ci,co) in enumerate(zip(kernelsizes[::-1],channels[1:][::-1],channels[:-1][::-1])):
             self.reverse_layers.append(FullSpecConv(co,ci,k))
             self.reverse_biases.append(tf.Variable(tf.zeros(co),name=f'rb{i}'))
+            if i>0:
+                self.matmul_variables.append(tf.Variable(tf.zeros((co,co)),name=f'mm{i}'))
 
     @tf.Module.with_name_scope
     def run_all(self,x):
@@ -73,30 +80,18 @@ class ConvAndTransposeNet(tf.Module):
         for i in range(self.n_layers):
             y=self.reverse_layers[i].applyT(y,self.strides[-1-i],shapes[-2-i],'SAME')
             y=y+self.reverse_biases[i]
+
+            if i>0:
+                y=y+tf.linalg.matmul(xs[-2-i],self.matmul_variables[i-1])
             if i!=self.n_layers-1:
                 y=tf.nn.relu(y)
 
             ys.append(y)
         return xs,ys
 
-    @tf.Module.with_name_scope
     def __call__(self,x):
-        shapes=[x.shape]
-        for i in range(self.n_layers):
-            x=self.fwd_layers[i].apply(x,self.strides[i],padding='SAME')
-            x=x+self.fwd_biases[i]
-            shapes.append(x.shape)
-
-            if i!=self.n_layers-1:
-                x=tf.nn.relu(x)
-
-        y=x
-        for i in range(self.n_layers):
-            y=self.reverse_layers[i].applyT(y,self.strides[-1-i],shapes[-2-i],'SAME')
-            y=y+self.reverse_biases[i]
-            if i!=self.n_layers-1:
-                y=tf.nn.relu(y)
-        return x,y
+        fui,fuo=self.run_all(x)
+        return fui[-1],fuo[-1]
 
 class FullSpecConv(tf.Module):
     '''

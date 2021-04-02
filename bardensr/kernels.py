@@ -8,7 +8,7 @@ def construct_1dslice(shp,st,sz,axis):
     '''
     Input:
     shp -- result of tf.shape
-    st -- scalar tf.int32 
+    st -- scalar tf.int32
     sz -- scalar tf.int32
     axis -- scalar tf.int32
 
@@ -16,7 +16,7 @@ def construct_1dslice(shp,st,sz,axis):
     stv
     szv
 
-    Such that 
+    Such that
     stv[i] = st if i==axis else 0
     szv[i] = -1 if i==axis else shp[i]
     '''
@@ -29,12 +29,12 @@ def construct_1dslice(shp,st,sz,axis):
     # make szv
     szv=tf.cast(tf.fill(nd,-1),dtype=tf.int32)
     szv=tf.tensor_scatter_nd_update(szv,[[axis]],[sz])
-    
+
     return stv,szv
 
 def hermite_interpolation(val1,deriv1,val2,deriv2,t):
     '''
-    Input 
+    Input
     - val1
     - deriv1
     - val2
@@ -60,14 +60,14 @@ def hermite_interpolation(val1,deriv1,val2,deriv2,t):
     h00 = 2*t3 - 3*t2+1
     h10 = t3 - 2*t2 + t
     h01 = -2*t3 + 3*t2
-    h11 = t3 - t2 
+    h11 = t3 - t2
 
     return h00*val1 + h10*deriv1 + h01*val2 + h11*deriv2
 
 
-def linear_interpolation(val1,deriv1,val2,deriv2,t):
+def linear_interpolation(val1,val2,t):
     '''
-    Input 
+    Input
     - val1
     - val2
     - t
@@ -82,98 +82,105 @@ def linear_interpolation(val1,deriv1,val2,deriv2,t):
 
     and we are trying to get a reasonable value for f(t)
     '''
- 
+
     return val1*(1-t) + val2*t
 
-def hermite_translation_on_grid(X,t,pad):
-    ''' 
-    Translates X along axis, using hermite interp.  Intuitively, something like
 
-        result[i0,i1, ...] approx X[pad[0]+i0+t[0]+1,pad[1]+i1+t[1]+1 ...] 
 
-    Input
-    - X -- M0 x M1 x M2 .... Mn
-    - t -- n
-    - pad -- n
+def floating_slices(X,t,sz,interpolation_method,cval=0):
+    '''
+    Batch version of floating_slice, where all the calls
+    have the same value for "sz."
 
-    Applies the translations:
-    - translate X along axis 0 by t[0]
-    - translate X along axis 1 by t[1]
-    - ...
-    - translate X along axis n by t[n]   
+        result[k] = X[k,t[k,0]:t[k,0]+sz[0], t[k,1]:t[k,1]+sz[1], ...]
 
-    To guarantee a predictable size of output, the user
-    must provide a padding term.  The user must guarantee
-    that -pad[i] <= floor(t[i]) < pad[i].
+    Input:
+    * X -- K x M0 x M1 x M2 ... x Mn
+    * t -- K x n floating point
+    * sz -- n integer
 
-    The output shape will satisfy
-    
-        result.shape[i] = X.shape[i] - (3+2*pad[i])   
+    Out:
+    * Y -- K x [[sz]]
 
     '''
+    sz=tf.convert_to_tensor(sz)
+    newXs = [floating_slice(X[f],t[f],sz,interpolation_method,cval) for f in range(X.shape[0])]
+    return tf.stack(newXs,axis=0)
 
-    # the bitty bit (decrements size by 3)
-    proportion=t%1
-    for d in range(t.shape[0]):
-        X = hermite_small_translation_1d(X,d,proportion[d])
+def floating_slice(X,t,sz,interpolation_method,cval=0):
+    '''
+    This function interpolates a slice of X
+    at floating-point locations.  That is,
 
-    # the integery bit (further decrements size by 2*pad)
-    integer_component=tf.cast(tf.math.floor(t),tf.int32)
-    sshp=tf.shape(X)
-    st = pad + integer_component
-    sz = sshp - pad*2
-    X= tf.slice(X,st,sz)
+        result = X[t[0]:t[0]+sz[0], t[1]:t[1]+sz[1], ...]
 
-    return X
+    where
 
-def linear_translation_on_grid(X,t,pad):
-    ''' 
-    Translates X along axis, using linear interp.  Intuitively, something like
+    - t is floating point and interpolation is performed
+      via interpolation_method (hermite or linear).
+    - if the relevant indices are out of bounds for X (or,
+      more specifically, outside the set of locations which can
+      be correctly interpolated via interpolation_method) we give
+      the value cval
 
-        result[i0,i1, ...] approx X[pad[0]+i0+t[0],pad[1]+i1+t[1] ...] 
+    Input:
+    * X -- M0 x M1 x M2 ... x Mn
+    * t -- n floating point
+    * sz -- n integer
 
-    Input
-    - X -- M0 x M1 x M2 .... Mn
-    - t -- n
-    - pad -- n
-
-    Applies the translations:
-    - translate X along axis 0 by t[0]
-    - translate X along axis 1 by t[1]
-    - ...
-    - translate X along axis n by t[n]   
-
-    To guarantee a predictable size of output, the user
-    must provide a padding term.  The user must guarantee
-    that -pad[i] <= floor(t[i]) < pad[i].
-
-    The output shape will satisfy
-    
-        result.shape[i] = X.shape[i] - (1+2*pad[i])   
+    Out:
+    * Y -- sz
 
     '''
+    X=tf.convert_to_tensor(X)
+    t=tf.cast(tf.convert_to_tensor(t),dtype=X.dtype)
+    sz=tf.convert_to_tensor(sz)
 
-    # the bitty bit (decrements size by 3)
-    proportion=t%1
+    assert X.dtype==tf.float32 or X.dtype==tf.float64
+    assert t.dtype==X.dtype
+    assert sz.dtype==tf.int32 or sz.dtype==tf.int64
+
+    p=t%1
+
+    # perform bitty bit
+    Y=X
     for d in range(t.shape[0]):
-        X = linear_small_translation_1d(X,d,proportion[d])
+        if interpolation_method=='hermite': # Y=X[1+p:-2+p]
+            Y = hermite_small_translation_1d(Y,d,p[d])
+        elif interpolation_method=='linear': # Y=X[p:-1+p]
+            Y = linear_small_translation_1d(Y,d,p[d])
+        else:
+            raise NotImplementedError()
 
-    # the integery bit (further decrements size by 2*pad)
-    integer_component=tf.cast(tf.math.floor(t),tf.int32)
-    sshp=tf.shape(X)
-    st = pad + integer_component
-    sz = sshp - pad*2
-    X= tf.slice(X,st,sz)
+    # how different is Y from the slice we want?
+    ic=tf.cast(tf.math.floor(t),tf.int32)
+    if interpolation_method=='hermite':
+        left_wrong   = ic-1
+        right_wrong  = sz+ic-1-tf.shape(Y)
+    elif interpolation_method=='linear':
+        left_wrong   = ic
+        right_wrong  = sz+ic-tf.shape(Y)
+    else:
+        raise NotImplementedError()
 
-    return X
+    # get pad and slice necessary to make Y what we want
+    pad_left   = tf.clip_by_value(-left_wrong,0,left_wrong.dtype.max)
+    slice_left = tf.clip_by_value(left_wrong,0,left_wrong.dtype.max)
+    pad_right  = tf.clip_by_value(right_wrong,0,left_wrong.dtype.max)
+
+    # do it!
+    Z=tf.pad(Y,tf.stack([pad_left,pad_right],axis=-1))
+    Z=tf.slice(Z,slice_left,sz)
+
+    return Z
 
 def hermite_samples_1d(X,axis,ts):
     '''
     Samples X along axis.  Intuitively, something like
 
-        result[...,i...,] approx X[...,ts[i],...] 
+        result[...,i...,] approx X[...,ts[i],...]
 
-    where t[i] may be floating point.  The shape 
+    where t[i] may be floating point.  The shape
     of result will be same as the shape of X,
     except along axis, where it will have same dimension as ts
 
@@ -192,17 +199,17 @@ def hermite_samples_1d(X,axis,ts):
 
     # get the four neighbors. these are of shape M0 x ... K ... Mn
     integer_component=tf.cast(tf.math.floor(ts),tf.int32)
-    W2 = tf.gather(X,integer_component-1,axis=axis) # 
+    W2 = tf.gather(X,integer_component-1,axis=axis) #
     W1 = tf.gather(X,integer_component,axis=axis)
     E1 = tf.gather(X,integer_component+1,axis=axis)
     E2 = tf.gather(X,integer_component+2,axis=axis)
-    
+
     # estimate derivatives at W1 and E1
     W1_deriv = (E1-W2)/2.0
     E1_deriv = (E2-W1)/2.0
 
     # broadcast ts correctly
-    n=shp.shape[0] # 
+    n=shp.shape[0] #
     newshape=tf.ones(n,dtype=tf.int32)
     newshape=tf.tensor_scatter_nd_update(newshape,[[axis]],tshp)
     props_broadcastable = tf.reshape(ts%1,newshape)
@@ -214,9 +221,9 @@ def hermite_small_translation_1d(X,axis,t):
     '''
     Translates X along axis by an amount 0<=t<=1.  Intuitively, something like
 
-        result[...,i...,] approx X[...,1+i+t,...] 
+        result[...,i...,] approx X[...,1+i+t,...]
 
-    where t is floating point  The shape 
+    where t is floating point  The shape
     of result will be same as the shape of X,
     except along axis, where it will be reduced by three.
     '''
@@ -234,7 +241,7 @@ def hermite_small_translation_1d(X,axis,t):
 
     stv=tf.tensor_scatter_nd_add(stv,[[axis]],[1])
     E2 = tf.slice(X,stv,szv)
-    
+
     # estimate derivatives at W1 and E1
     W1_deriv = (E1-W2)/2.0
     E1_deriv = (E2-W1)/2.0
@@ -247,9 +254,9 @@ def linear_small_translation_1d(X,axis,t):
     '''
     Translates X along axis by an amount 0<=t<=1.  Intuitively, something like
 
-        result[...,i...,] approx X[...,i+t,...] 
+        result[...,i...,] approx X[...,i+t,...]
 
-    where t is floating point  The shape 
+    where t is floating point  The shape
     of result will be same as the shape of X,
     except along axis, where it will be reduced by 1.
     '''

@@ -1,6 +1,7 @@
 import numpy as np
 import numpy.random as npr
 from .. import rectangles
+import tensorflow as tf
 
 def box_line_intersect(box_st,box_en,loc,angle):
     '''
@@ -40,7 +41,37 @@ def box_line_intersect(box_st,box_en,loc,angle):
 
     return intrscts[good]
 
-def simulate_from_length(axonradius_vox = 1,  # units in voxel
+def cylinder_distances(locs,directions,ms,ensure_unit_directions=True):
+    '''
+    Input:
+    - locs: n x J
+    - directions: n x J
+    - ms: M1 x M2 ... Mn x n
+    - ensure_unit_directions: if True, directions[:,j] is normalized for each j
+                               if False, user must ensure this is true
+
+    Output is cylinders: M0 x M1 ... Mn x J, binary
+
+    cylinders is defined such that
+
+        cylinders[j,m0,m1...]
+
+    gives the squared distance between the point ms[m0,m1,...] and the line
+
+        L = {x: x=loc[j] + directions[j]*alpha for some alpha}
+    '''
+
+    if ensure_unit_directions:
+        directions=directions/tf.math.sqrt(tf.reduce_sum(directions**2,axis=0))
+
+    # make cylinder
+    df   = locs-ms[...,None]   # e.g  (M0,M1,M2,3,J)
+    dsts = tf.reduce_sum(df**2,axis=-2) # e.g. (M0,M1,M2,J)
+    proj = tf.reduce_sum(df*directions,axis=-2)**2 # e.g (M0,M1,M2,J)
+
+    return dsts-proj
+
+def simulate_from_length(J,axonradius_vox = 1,  # units in voxel
                           rolplength = 0.08, # rol per micron
                           voxsize = (5,5,20),  # units in micron
                           box = (300,300,300),  # units in micron)
@@ -52,14 +83,51 @@ def simulate_from_length(axonradius_vox = 1,  # units in voxel
     - rolonies (M0,M1,...), binary
     '''
 
-    box=np.array(box).astype(float)
+    box=np.require(box).astype(float)
     voxsize=np.array(voxsize)
     nd=len(box)
     assert loc_centering<=.5
 
+    # get cylinder and positions of rolonies along cylinder
+    # in units of voxels
+    lars=[]
+    for j in range(J):
+        lars.append=simulate_from_length_sparse(rolplength,box,loc_centering)
+
     # get meshgrid
     voxel_centers=[np.r_[0:b:v]//v for (b,v) in zip(box,voxsize)] # voxel units
     ms=np.stack(np.meshgrid(*voxel_centers,indexing='ij'),axis=-1).astype(float)  # unit in voxels
+
+    # make cylinder
+    df   = loc-ms   #(M0,M1,M2,3)  # unit in voxels.
+    dsts = np.sum(df**2,axis=-1) #(M0,M1,M2)
+    proj = np.sum(df*angle,axis=-1)**2 #(M0,M1,M2)
+    cylinder = np.sqrt(dsts-proj) < axonradius_vox  # voxels comparison.
+
+    # make rolonies
+    r=np.zeros(cylinder.shape,dtype=np.bool)
+    r[tuple(rolpos.T)]=True
+
+    return cylinder,r
+
+def simulate_from_length_sparse(
+                          rolplength = 0.08,
+                          box = (300,300,300),
+                          loc_centering=.05,
+                         ):
+    '''
+    Simulates a random line and some random points along that line
+    that lie within the box.
+
+    output
+    - loc, 3-vector (in voxel-space)
+    - angle, 3-vector (in voxelspace)
+    - rolpos, N x 3 integers (in voxelspace)
+    '''
+
+    box=np.array(box).astype(float)
+    nd=len(box)
+    assert loc_centering<=.5
 
     # pick a location in the box
     loc = np.random.rand(nd)*box*(1-loc_centering*2)+box*loc_centering
@@ -80,26 +148,4 @@ def simulate_from_length(axonradius_vox = 1,  # units in voxel
     alphas=npr.rand(numrols)
     rolpos = alphas[:,None]*w1[None,:]+(1-alphas[:,None])*w2[None,:]
 
-    # convert to voxeltown
-    loc=loc / voxsize
-    rolpos =(rolpos / voxsize[None,:]).astype(int)
-    angle = angle / voxsize
-    angle=angle/np.sqrt(np.sum(angle**2))
-
-    # make cylinder
-    df   = loc-ms   #(M0,M1,M2,3)  # unit in voxels.
-    dsts = np.sum(df**2,axis=-1) #(M0,M1,M2)
-    proj = np.sum(df*angle,axis=-1)**2 #(M0,M1,M2)
-    cylinder = np.sqrt(dsts-proj) < axonradius_vox  # voxels comparison.
-
-    # make rolonies
-    r=np.zeros(cylinder.shape,dtype=np.bool)
-    r[tuple(rolpos.T)]=True
-
-    return dict(
-        GT_voxels=cylinder,
-        rolonies=r,
-        w1=w1,
-        w2=w2,
-        L=L
-    )
+    return loc,angle,rolpos
