@@ -1,19 +1,65 @@
 import tensorflow as tf
+import tensorflow_felzenszwalb_edt
+import numpy as np
+import numpy.random as npr
 
-def cnn_and_transpose(kernels,sizes,strides,use_batchnorm=True, final_relu=False):
-    lst = []
-    for i in range(len(sizes) - 1):
-        lst.append(torch.nn.Linear(sizes[i], sizes[i + 1]))
-        if use_batchnorm:
-            lst.append(torch.nn.BatchNorm1d(sizes[i + 1]))
-        lst.append(torch.nn.ReLU())
-    if not final_relu:
-        lst = lst[:-1]
+def morphedt2(f,maxout=100000.0,axes=(0,1)):
+    f=tf.convert_to_tensor(f,dtype=tf.float32)
+    g=tensorflow_felzenszwalb_edt.edt1d(maxout*(1-f),axis=axes[0])[0]
+    g=tensorflow_felzenszwalb_edt.edt1d(g,axis=axes[1])[0]
+    return g
 
-    return torch.nn.Sequential(*lst)
+def skellypad(f,maxout=100000.0,radius=20.0,smooth=1.0,axes=(0,1)):
+    g=morphedt2(f,axes=axes,maxout=maxout)
+    g=tf.math.sigmoid((g-radius)/smooth)
+
+    # pad with 1s to avoid weird border effect
+    paddings=np.zeros((len(f.shape),2))
+    paddings[axes[0]]=(1,1)
+    paddings[axes[1]]=(1,1)
+    g=tf.pad(g,paddings,constant_values=1)
+
+    # do morph
+    g=morphedt2(g,axes=axes,maxout=maxout)
+
+    # unpad
+    happyslice=[slice(0,None) for i in range(len(f.shape))]
+    happyslice[axes[0]]=slice(1,-1)
+    happyslice[axes[1]]=slice(1,-1)
+    g=g[tuple(happyslice)]
+
+    # done
+    return g
+
+
+def skelly(f,maxout=100000.0,radius=20.0,smooth=1.0,axes=(0,1)):
+    g=morphedt2(f,axes=axes,maxout=maxout)
+    g=tf.math.sigmoid((g-radius)/smooth)
+    g=morphedt2(g,axes=axes,maxout=maxout)
+    return g
+
+class EDTConvAndTransposeNet(tf.Module):
+    def __init__(self,n_rads,*args,name=None,init_rad=20,init_smooth=20,**kwargs):
+        super().__init__(name=name)
+        self.n_rads=n_rads
+        self.rads=tf.Variable(npr.rand(n_rads).astype(np.float32)+init_rad)
+        self.smooths=tf.Variable(npr.rand(n_rads).astype(np.float32)+init_smooth)
+        self.catn=ConvAndTransposeNet(*args,**kwargs)
+
+    def apply_edt(self,batch):
+        axes=list(range(1,len(batch.shape)))
+        lst=[batch]
+        for i in range(self.n_rads):
+            lst.append(skelly(batch,radius=self.rads[i],smooth=self.smooths[i],axes=axes))
+        return tf.stack(lst,axis=-1)
+
+    def __call__(self,x):
+        x=self.apply_edt(x)
+        fui,fuo=self.catn.run_all(x)
+        return fui[-1],fuo[-1]
 
 class ConvAndTransposeNet(tf.Module):
-    def __init__(self,channels,kernelsizes,strides,name=None,batch=True):
+    def __init__(self,channels,kernelsizes,strides,name=None,batch=True,final_channel=None):
         '''
         Two networks.  First network looks like this
 
@@ -44,6 +90,9 @@ class ConvAndTransposeNet(tf.Module):
         self.strides=strides
         self.batch=batch
         self.is_training=True
+        if final_channel is None:
+            final_channel=channels[0]
+        self.final_channel=final_channel
 
         self.fwd_biases=[]
         self.fwd_layers=[]
@@ -55,11 +104,14 @@ class ConvAndTransposeNet(tf.Module):
         self.matmul_variables=[]
         self.reverse_layers=[]
         self.reverse_biases=[]
-        for i,(k,ci,co) in enumerate(zip(kernelsizes[::-1],channels[1:][::-1],channels[:-1][::-1])):
+        out_channels=list(channels)
+        out_channels[0]=final_channel
+        for i,(k,ci,co,co2) in enumerate(zip(kernelsizes[::-1],out_channels[1:][::-1],out_channels[:-1][::-1],channels[:-1][::-1])):
             self.reverse_layers.append(FullSpecConv(co,ci,k))
             self.reverse_biases.append(tf.Variable(tf.zeros(co),name=f'rb{i}'))
             if i>0:
-                self.matmul_variables.append(tf.Variable(tf.zeros((co,co)),name=f'mm{i}'))
+                self.matmul_variables.append(tf.Variable(tf.zeros((co2,co)),name=f'mm{i}'))
+
 
     @tf.Module.with_name_scope
     def run_all(self,x):
@@ -75,10 +127,12 @@ class ConvAndTransposeNet(tf.Module):
 
             xs.append(x)
 
+        final_shapes=list(shapes)
+        final_shapes[0]=final_shapes[0][:-1] + (self.final_channel,)
         ys=[x]
         y=x
         for i in range(self.n_layers):
-            y=self.reverse_layers[i].applyT(y,self.strides[-1-i],shapes[-2-i],'SAME')
+            y=self.reverse_layers[i].applyT(y,self.strides[-1-i],final_shapes[-2-i],'SAME')
             y=y+self.reverse_biases[i]
 
             if i>0:
@@ -111,7 +165,8 @@ class FullSpecConv(tf.Module):
         self.nd=len(kernel_size)
         assert self.nd in [1,2,3]
 
-
+        self.in_channels=in_channels
+        self.out_channels=out_channels
         self.conver=[tf.nn.conv1d,tf.nn.conv2d,tf.nn.conv3d][self.nd-1]
         self.converT=[tf.nn.conv1d_transpose,tf.nn.conv2d_transpose,tf.nn.conv3d_transpose][self.nd-1]
 
