@@ -309,6 +309,20 @@ def gaussian_filter_3d(X,sigmas):
 
     return X
 
+
+@tf.function(autograph=False)
+def gaussian_filter_2d(X,sigmas):
+    '''
+    X -- ... x M0 x M1
+    sigma -- tuple of length 2
+    '''
+
+    nd=len(X.shape)
+    X=gaussian_filter_1d(X,sigmas[0],nd-2)
+    X=gaussian_filter_1d(X,sigmas[1],nd-1)
+
+    return X
+
 def gaussian_filter_1d(X,sigma,axis):
     '''
     X -- tensor

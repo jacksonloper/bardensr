@@ -5,8 +5,8 @@ import numpy.random as npr
 
 def morphedt2(f,maxout=100000.0,axes=(0,1)):
     f=tf.convert_to_tensor(f,dtype=tf.float32)
-    g=tensorflow_felzenszwalb_edt.edt1d(maxout*(1-f),axis=axes[0])[0]
-    g=tensorflow_felzenszwalb_edt.edt1d(g,axis=axes[1])[0]
+    g=tensorflow_felzenszwalb_edt.edt1d(maxout*(1-f),axes[0])[0]
+    g=tensorflow_felzenszwalb_edt.edt1d(g,axes[1])[0]
     return g
 
 def skellypad(f,maxout=100000.0,radius=20.0,smooth=1.0,axes=(0,1)):
@@ -33,10 +33,11 @@ def skellypad(f,maxout=100000.0,radius=20.0,smooth=1.0,axes=(0,1)):
 
 
 def skelly(f,maxout=100000.0,radius=20.0,smooth=1.0,axes=(0,1)):
-    g=morphedt2(f,axes=axes,maxout=maxout)
-    g=tf.math.sigmoid((g-radius)/smooth)
-    g=morphedt2(g,axes=axes,maxout=maxout)
-    return g
+    with tf.name_scope("skelly"):
+        g=morphedt2(f,axes=axes,maxout=maxout)
+        g=tf.math.sigmoid((g-radius)/smooth)
+        g=morphedt2(g,axes=axes,maxout=maxout)
+        return g
 
 class EDTConvAndTransposeNet(tf.Module):
     def __init__(self,n_rads,*args,name=None,init_rad=20,init_smooth=20,**kwargs):
@@ -59,7 +60,8 @@ class EDTConvAndTransposeNet(tf.Module):
         return fui[-1],fuo[-1]
 
 class ConvAndTransposeNet(tf.Module):
-    def __init__(self,channels,kernelsizes,strides,name=None,batch=True,final_channel=None):
+    def __init__(self,channels,kernelsizes,strides,name=None,batch=True,final_channel=None,
+                                middle_relu=False,middle_skipconnection=False):
         '''
         Two networks.  First network looks like this
 
@@ -89,6 +91,8 @@ class ConvAndTransposeNet(tf.Module):
         self.n_layers=len(kernelsizes)
         self.strides=strides
         self.batch=batch
+        self.middle_relu=middle_relu
+        self.middle_skipconnection=middle_skipconnection
         self.is_training=True
         if final_channel is None:
             final_channel=channels[0]
@@ -109,7 +113,7 @@ class ConvAndTransposeNet(tf.Module):
         for i,(k,ci,co,co2) in enumerate(zip(kernelsizes[::-1],out_channels[1:][::-1],out_channels[:-1][::-1],channels[:-1][::-1])):
             self.reverse_layers.append(FullSpecConv(co,ci,k))
             self.reverse_biases.append(tf.Variable(tf.zeros(co),name=f'rb{i}'))
-            if i>0:
+            if self.middle_skipconnection or i>0:
                 self.matmul_variables.append(tf.Variable(tf.zeros((co2,co)),name=f'mm{i}'))
 
 
@@ -118,29 +122,36 @@ class ConvAndTransposeNet(tf.Module):
         xs=[x]
         shapes=[x.shape]
         for i in range(self.n_layers):
-            x=self.fwd_layers[i].apply(x,self.strides[i],padding='SAME')
-            x=x+self.fwd_biases[i]
-            shapes.append(x.shape)
+            with tf.name_scope(f'fwd_{i}'):
+                x=self.fwd_layers[i].apply(x,self.strides[i],padding='SAME')
+                x=x+self.fwd_biases[i]
+                shapes.append(x.shape)
 
-            if i!=self.n_layers-1:
-                x=tf.nn.relu(x)
+                if self.middle_relu or (i!=self.n_layers-1):
+                    x=tf.nn.relu(x)
 
-            xs.append(x)
+                xs.append(x)
 
         final_shapes=list(shapes)
         final_shapes[0]=final_shapes[0][:-1] + (self.final_channel,)
         ys=[x]
         y=x
+
         for i in range(self.n_layers):
-            y=self.reverse_layers[i].applyT(y,self.strides[-1-i],final_shapes[-2-i],'SAME')
-            y=y+self.reverse_biases[i]
 
-            if i>0:
-                y=y+tf.linalg.matmul(xs[-2-i],self.matmul_variables[i-1])
-            if i!=self.n_layers-1:
-                y=tf.nn.relu(y)
+            with tf.name_scope(f'rev_{i}'):
+                y=self.reverse_layers[i].applyT(y,self.strides[-1-i],final_shapes[-2-i],'SAME')
+                y=y+self.reverse_biases[i]
 
-            ys.append(y)
+                if self.middle_skipconnection:
+                    y=y+tf.linalg.matmul(xs[-2-i],self.matmul_variables[i])
+                elif i>0:
+                    y=y+tf.linalg.matmul(xs[-2-i],self.matmul_variables[i-1])
+
+                if i!=self.n_layers-1:
+                    y=tf.nn.relu(y)
+
+                ys.append(y)
         return xs,ys
 
     def __call__(self,x):
@@ -172,6 +183,7 @@ class FullSpecConv(tf.Module):
 
         mult=tf.math.sqrt(tf.cast(tf.reduce_prod(kernel_size)*in_channels,dtype=tf.float32))
         self.kernel=tf.Variable(tf.random.normal(kernel_size+(in_channels,out_channels))/mult)
+
 
     def apply(self,x,strides,padding):
         return self.conver(x,self.kernel,(1,)+strides+(1,),padding)
