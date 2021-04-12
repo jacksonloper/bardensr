@@ -7,37 +7,37 @@ def calc_circum(V):
     '''
     input
     * V -- (batch x (d+1) x d) -- a simplex
-    
+
     Output
     * circumcenters -- (batch,d)
     * circumradii -- (batch)
     '''
-    
+
     '''
     Let
-    
+
         diff = V[i,j1] - V[i,j2]
         diff = diff/np.linalg.norm(diff)
-    
+
     Then circumcenter[i] must satisfy
-    
+
         np.sum(circumcenter[i]*diff) == .5*np.sum(diff*(V[i,j1]+V[i,j2]))
-    
+
     This forms a system we can work with to compute circumcenters
     and circumradii.
     '''
-    
+
     directions = V[:,[0]] - V[:,1:]  # batch x d x d
     avgs = .5*(V[:,[0]] + V[:,1:]) # batch x d x d
     directions = directions / np.linalg.norm(directions,keepdims=True,axis=-1) # batch x d x d
-    
+
     beta = np.sum(avgs*directions,axis=-1)
-    
+
     circumcenters = np.linalg.solve(directions,beta) # batch x d
     circumradii = np.linalg.norm(circumcenters - V[:,0],axis=-1)
-    
+
     return circumcenters,circumradii
-    
+
 
 def nan_robust_hamming(A,B):
     '''
@@ -92,6 +92,19 @@ def maybe_tqdm(n,use_tqdm_notebook,*args,**kwargs):
     else:
         return n
 
+def maybe_tqdm_ray(jobs,use_tqdm_notebook):
+    import ray
+    if use_tqdm_notebook:
+        import tqdm.notebook
+        def toit(job_ids):
+            while job_ids:
+                done,job_ids =ray.wait(job_ids)
+                yield ray.get(done[0])
+        return tqdm.notebook.tqdm(toit(jobs),total=len(jobs))
+    else:
+        return [ray.get(x) for x in jobs]
+
+
 def convert_codebook_to_onehot_form(codebook):
     '''
     Input: codebook, JxR
@@ -103,3 +116,25 @@ def convert_codebook_to_onehot_form(codebook):
     codes=np.concatenate([codes,np.full((1,C),np.nan)],axis=0)
     codebook=codes[codebook.ravel()].reshape((J,R,C))
     return np.transpose(codebook,[1,2,0])
+
+def ray_batch(f,arglist,use_tqdm_notebook=False):
+    try:
+        import ray
+    except ModuleNotFoundError:
+        raise ModuleNotFoundError("batching methods require the ray package") from None
+
+    assert ray.is_initialized(),'user should initialize ray with "import ray; ray.init()" before calling register_batched'
+
+    if use_gpus:
+        @ray.remote(num_gpus=1)
+        def go(arg):
+            ids=ray.get_gpu_ids()
+            assert len(ids)==1
+            gpuid=ids[0]
+            with tf.device(f"gpu:{gpuid}"):
+                return f(arg)
+    else:
+        go = ray.remote(f)
+
+    jobs=[go.remote(arg) for arg in arglist]
+    return misc.maybe_tqdm_ray(jobs, use_tqdm_notebook)

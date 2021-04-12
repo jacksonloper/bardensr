@@ -6,6 +6,7 @@ from . import misc
 import subprocess
 from contextlib import contextmanager
 import IPython.display
+import collections
 
 from mpl_toolkits.mplot3d import Axes3D
 
@@ -251,7 +252,7 @@ def focpt(m1,m2,bc,radius=10,j=None,X=None,**kwargs):
 
     plot_rbc(R,C,go,**kwargs)
 
-def lutup(A,B,C,D,sc=.5,normstyle='each'):
+def lutup(A,B,C,D,sc=.5,normstyle='none'):
     data=np.stack([A,B,C,D],axis=0).astype(float)
 
     if normstyle=='each':
@@ -261,6 +262,10 @@ def lutup(A,B,C,D,sc=.5,normstyle='each'):
     elif normstyle=='all':
         data-=np.min(data)
         data/=np.max(data)
+    elif normstyle=='none':
+        pass
+    else:
+        raise NotImplementedError(normstyle)
 
     colors=np.array([
         [1,2,4],  # BLUE!
@@ -408,3 +413,125 @@ class AnimAcross:
 
         if exc_type is not None:
             print(exc_type,exc_val,exc_tb)
+
+DirResult=collections.namedtuple('DirResult',['path','subdirs','nodes'])
+
+def get_graph_def_from_tf_concrete_function(cf):
+    gd=cf.graph.as_graph_def()
+
+    lk={x.name:i for (i,x) in enumerate(gd.node)}
+    node_attributes=[{} for i in range(len(gd.node))]
+    E=np.zeros((len(gd.node),len(gd.node)),dtype=np.bool)
+    for nd in gd.node:
+        node_attributes[lk[nd.name]]['name']=nd.name
+        if hasattr(nd,'attr') and 'value' in nd.attr:
+            node_attributes[lk[nd.name]]['value']='const'
+        for inp in nd.input:
+            E[lk[inp.split(":")[0]],lk[nd.name]]=True
+
+    allnames=[x['name'] for x in node_attributes]
+
+    nodes_hit=set()
+
+    grps=collections.defaultdict(lambda: (set(),set()))
+    for na in node_attributes:
+        nms=na['name'].split('/')
+        for i in range(len(nms)):
+            a='/'.join(nms[:i])
+            b='/'.join(nms[:i+1])
+            if b in allnames:
+                grps[a][1].add(b)
+                nodes_hit.add(b)
+        for i in range(len(nms)-1):
+            a='/'.join(nms[:i])
+            b='/'.join(nms[:i+1])
+            grps[a][0].add(b)
+
+    def walker(root=''):
+        dr=grps[root]
+        yield DirResult(root,*dr)
+        for sub in dr[0]:
+            yield from walker(sub)
+
+    return node_attributes,E,walker
+
+def tfgraphlook(gd):
+    import pygraphviz,collections
+    closed_directory_names=[]
+
+    HG_down=collections.defaultdict(set)
+    roots=set()
+    leaves=set()
+    lk={x.name:i for (i,x) in enumerate(gd.node)}
+
+    cdn_lookups={}
+
+    for nd in gd.node:
+        nm=nd.name
+        for cdn in closed_directory_names:
+            if cdn in nd.name:
+                cdn=nd.name[:nd.name.find(cdn)+len(cdn)]
+                cdn_lookups[nm]=cdn
+                nm=cdn
+
+        leaves.add(nm)
+        nms=nm.split("/")
+        roots.add(nms[0])
+        for i in range(1,len(nms)):
+            a='/'.join(nms[:i])
+            b='/'.join(nms[:i+1])
+            HG_down[a].add(b)
+
+    grph=pygraphviz.AGraph(directed=True)
+
+    def addleaf(subg,nm):
+        # print(nm)
+        if nm in lk:
+            attrs=gd.node[lk[nm]].attr
+            if 'value' in attrs:
+                val=attrs['value']
+                if hasattr(val,'tensor'):
+                    shp=[str(x).strip() for x in val.tensor.tensor_shape.dim]
+                    labloo=','.join([str(x) for x in list(val.tensor.int_val)+list(val.tensor.double_val)])
+                    if labloo=='':
+                        labloo=f'[constant {str(shp)}]'
+                    subg.add_node(nm,label=labloo)
+                else:
+                    subg.add_node(nm,label=str(val))
+            else:
+                subg.add_node(nm,label=nm.split('/')[-1])
+        else:
+            subg.add_node(nm,label=nm.split('/')[-1])
+
+    def crawl(grph,nm,depth):
+        if nm in HG_down: # it has descendants!
+            subg=grph.add_subgraph(
+                name='cluster_'+nm,
+                label=nm.split('/')[-1],
+                style='filled',
+                fillcolor="#ccccccbb"
+            )
+            for subn in HG_down[nm]:
+                crawl(subg,subn,depth+1)
+
+            if nm in leaves:
+                addleaf(subg,nm)
+        else: # it has no descendents!
+            if nm in leaves:
+                addleaf(grph,nm)
+
+
+    for r in roots:
+        crawl(grph,r,0)
+
+    for nd in gd.node:
+        for inp in nd.input:
+            a=inp.split(":")[0]
+            b=nd.name
+            if a in cdn_lookups:
+                a=cdn_lookups[a]
+            if b in cdn_lookups:
+                b=cdn_lookups[b]
+            grph.add_edge(a,b)
+
+    return grph

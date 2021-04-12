@@ -3,68 +3,53 @@ import scipy as sp
 import itertools
 from . import rectangles
 import dataclasses
+import math
 
 import collections
 
 Tile=collections.namedtuple('Tile',['look','grab','put'])
 
 @dataclasses.dataclass
-class MultiTile:
-    look: tuple
-    grab: tuple
-    put: tuple
+class LookGrabPut:
+    look: rectangles.Rectangle
+    grab: rectangles.Rectangle
+    put: rectangles.Rectangle
 
-    def look_size(self):
-        return np.array([x.stop-x.start for x in self.look])
+    def __mul__(self,other):
+        if other is None:
+            return self
+        return LookGrabPut(
+            self.look*other.look,
+            self.grab*other.grab,
+            self.put*other.put,
+        )
 
-    def look_center(self):
-        return np.array([x.stop+x.start for x in self.look])*.5
-
-    def add_batch_dimension(self,look,axis,grab=None,put=None):
-        mlook=list(self.look)
-        mgrab=list(self.grab)
-        mput=list(self.put)
-
-        mlook.insert(axis,look)
-
-        if (grab is None) or (put is None):
-            assert grab is None
-            assert put is None
-
-            mgrab.insert(axis,slice(0,look.stop-look.start))
-            mput.insert(axis,look)
+    def __rmul__(self,other):
+        if other is None:
+            return self
         else:
-            mgrab.insert(axis,grab)
-            mput.insert(axis,put)
+            return other*self
 
-        return MultiTile(tuple(mlook),tuple(mgrab),tuple(mput))
 
-    def dilate_look(self,r,axis):
-        look=list(self.look)
-        look[axis]=slice(look[axis].start-r,look[axis].stop+r)
 
-        newsz=look[axis].stop-look[axis].start
+def tile_up_simple(start,stop,sz):
+    '''
+    batches a stretch of indices up into equally-sized
+    nonoverlapping tiles which avoid the edge by "border"
+    '''
 
-        grab=list(self.grab)
-        grab[axis]=slice(grab[axis].start+r,grab[axis].stop+r)
+    bins=np.r_[start:stop:sz]
+    assert len(bins)>0
 
-        return MultiTile(tuple(look),tuple(grab),self.put)
+    return [rectangles.Rectangle([bins[i]],[bins[i+1]]) for i in range(len(bins)-1)]
 
-def downsample_multitile(mt,ds):
-    return MultiTile(
-        tuple([slice(x.start//d,x.stop//d) for x,d in zip(mt.look,ds)]),
-        tuple([slice(x.start//d,x.stop//d) for x,d in zip(mt.grab,ds)]),
-        tuple([slice(x.start//d,x.stop//d) for x,d in zip(mt.put,ds)]),
-    )
+def tile_up_simple_nd(starts,stops,szs):
+    ls=[tile_up_simple(l,s,b) for (l,s,b) in zip(starts,stops,szs)]
+    return [math.prod(x,start=None) for x in itertools.product(*ls)]
 
-def tiles2multitiles(*tiles):
-    return MultiTile(
-        tuple([x.look for x in tiles]),
-        tuple([x.grab for x in tiles]),
-        tuple([x.put for x in tiles])
-    )
 
-def tile_up(length,inner_sz,border_sz):
+
+def tile_up(length,inner_sz,border_sz,last_edge_behavior='short'):
     '''
     batches a stretch of indices up into overlapping tiles.
 
@@ -91,20 +76,20 @@ def tile_up(length,inner_sz,border_sz):
     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
     . . . . . . . . . . . . . . . . . . . . . . . .|
     0 1 2 3 4 5 6                                  |   look
-          0 1 2 3 4 5 6 7 8                        |   blocks 
+          0 1 2 3 4 5 6 7 8                        |   blocks
                     0 1 2 3 4 5 6 7 8              |   shown
                               0 1 2 3 4 5 6 7 8    |   here
-                                        0 1 2 3 4 5|   
+                                        0 1 2 3 4 5|
 
 
                         1 1 1 1 1 1 1 1 1 1 2 2 2 2
     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
     . . . . . . . . . . . . . . . . . . . . . . . .|
     0 1 2 3 4                                      |   grab/put
-              2 3 4 5 6                            |   blocks 
+              2 3 4 5 6                            |   blocks
                         2 3 4 5 6                  |   shown
                                   2 3 4 5 6        |   here
-                                            2 3 4 5|   
+                                            2 3 4 5|
 
 
 
@@ -115,15 +100,17 @@ def tile_up(length,inner_sz,border_sz):
 
     if ib >= length:
         # only one tile!
-        return [Tile(slice(0,length),slice(0,length),slice(0,length))]
+        lookblocks=[(0,length)]
+        grabblocks=[(0,length)]
+        putblocks=[(0,length)]
     else:
         lookblocks=[]
         grabblocks=[]
         putblocks=[]
 
-        lookblocks.append(slice(0,ib))
-        grabblocks.append(slice(0,inner_sz))
-        putblocks.append(slice(0,inner_sz))
+        lookblocks.append((0,ib))
+        grabblocks.append((0,inner_sz))
+        putblocks.append((0,inner_sz))
 
         def get_next_block(st):
             '''
@@ -133,24 +120,40 @@ def tile_up(length,inner_sz,border_sz):
             en = st+ib2
             if en>length:
                 # uh oh.  this is our last tile!
-                lookblocks.append(slice(st,length))
-                grabblocks.append(slice(border_sz,length-st))
-                putblocks.append(slice(st+border_sz,length))
+                if last_edge_behavior=='reduplicate':
+                    st = np.min([st,length-ib])
+                    lookblocks.append((st,length))
+                    grabblocks.append((border_sz,(length-st)))
+                    putblocks.append((st+border_sz,length))
+                elif last_edge_behavior=='short':
+                    lookblocks.append((st,length))
+                    grabblocks.append((border_sz,length-st))
+                    putblocks.append((st+border_sz,length))
+                elif last_edge_behavior=='drop':
+                    pass
+                else:
+                    raise NotImplementedError()
                 return False
             else:
                 # regular old tile
-                lookblocks.append(slice(st,en))
-                grabblocks.append(slice(border_sz,ib))
-                putblocks.append(slice(st+border_sz,en-border_sz))
+                lookblocks.append((st,en))
+                grabblocks.append((border_sz,ib))
+                putblocks.append((st+border_sz,en-border_sz))
                 return True
 
-        while get_next_block(putblocks[-1].stop-border_sz):
+        while get_next_block(putblocks[-1][1]-border_sz):
             pass
 
-        return [Tile(*x) for x in zip(lookblocks,grabblocks,putblocks)]
+    rez=[]
+    for ((l0,l1),(g0,g1),(p0,p1)) in zip(lookblocks,grabblocks,putblocks):
+        rez.append(LookGrabPut(
+            rectangles.Rectangle([l0],[l1]),
+            rectangles.Rectangle([g0],[g1]),
+            rectangles.Rectangle([p0],[p1]),
+        ))
+    return rez
 
-
-def tile_up_noborder(length,inner_sz,border_sz):
+def tile_up_noborder(length,inner_sz,border_sz,last_edge_behavior='short'):
     '''
     batches a stretch of indices up into overlapping tiles,
     and refuses to consider regions that don't have suitable
@@ -179,20 +182,20 @@ def tile_up_noborder(length,inner_sz,border_sz):
     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
     . . . . . . . . . . . . . . . . . . . . . . . .|
     0 1 2 3 4 5 6                                  |   look
-          0 1 2 3 4 5 6 7 8                        |   blocks 
+          0 1 2 3 4 5 6 7 8                        |   blocks
                     0 1 2 3 4 5 6 7 8              |   shown
                               0 1 2 3 4 5 6 7 8    |   here
-                                        0 1 2 3 4 5|   
+                                        0 1 2 3 4 5|
 
 
                         1 1 1 1 1 1 1 1 1 1 2 2 2 2
     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
     . . . . . . . . . . . . . . . . . . . . . . . .|
         2 3 4                                      |   grab/put
-              2 3 4 5 6                            |   blocks 
+              2 3 4 5 6                            |   blocks
                         2 3 4 5 6                  |   shown
                                   2 3 4 5 6        |   here
-                                            2 3    |   
+                                            2 3    |
 
 
 
@@ -203,53 +206,74 @@ def tile_up_noborder(length,inner_sz,border_sz):
 
     if ib >= length:
         # only one tile!
-        return [Tile(slice(0,length),slice(0,length),slice(0,length))]
+        assert (length-border_sz*2)>0,'with that much border, theres nothing left here...'
+        lookblocks=[(0,length)]
+        grabblocks=[(0,length-border_sz*2)]
+        putblocks=[(border_sz,length-border_sz)]
     else:
         lookblocks=[]
         grabblocks=[]
         putblocks=[]
 
-        lookblocks.append(slice(0,ib))
-        grabblocks.append(slice(border_sz,inner_sz))
-        putblocks.append(slice(border_sz,inner_sz))
+        lookblocks.append((0,ib2))
+        grabblocks.append((border_sz,border_sz+inner_sz))
+        putblocks.append((border_sz,border_sz+inner_sz))
 
         def get_next_block(st):
             '''
-            creates another block, with lookblock starting
-            at st
+            creates another block, with
+            - lookblock starting at st
+            - putblock starting at st+border_sz
+            - probably ending at st+ib2 (unless it is the last tile)
             '''
             en = st+ib2
             if en>length:
                 # uh oh.  this is our last tile!
-                lookblocks.append(slice(st,length))
-                grabblocks.append(slice(border_sz,length-st-border_sz))
-                putblocks.append(slice(st+border_sz,length-border_sz))
-                return False
+                if last_edge_behavior=='drop':
+                    return False
+                elif last_edge_behavior=='reduplicate':
+                    st = np.min([st,length-ib2])
+                    lookblocks.append((st,length))
+                    grabblocks.append((border_sz,(length-st-border_sz)))
+                    putblocks.append((st+border_sz,length-border_sz))
+                    return False
+                elif last_edge_behavior=='short':
+                    lookblocks.append((st,length))
+                    grabblocks.append((border_sz,length-st-border_sz))
+                    putblocks.append((st+border_sz,length-border_sz))
+                    return False
+                else:
+                    return NotImplementedError(last_edge_behavior)
             else:
                 # regular old tile
-                lookblocks.append(slice(st,en))
-                grabblocks.append(slice(border_sz,ib))
-                putblocks.append(slice(st+border_sz,en-border_sz))
+                lookblocks.append((st,en))
+                grabblocks.append((border_sz,ib))
+                putblocks.append((st+border_sz,en-border_sz))
                 return True
 
-        while get_next_block(putblocks[-1].stop-border_sz):
+        while get_next_block(putblocks[-1][1]-border_sz):
             pass
 
-        return [Tile(*x) for x in zip(lookblocks,grabblocks,putblocks)]
+    rez=[]
+    for ((l0,l1),(g0,g1),(p0,p1)) in zip(lookblocks,grabblocks,putblocks):
+        rez.append(LookGrabPut(
+            rectangles.Rectangle([l0],[l1]),
+            rectangles.Rectangle([g0],[g1]),
+            rectangles.Rectangle([p0],[p1]),
+        ))
+    return rez
+
 
 def calc_neighborhood_structure(tiles):
     n=len(tiles)
     X=np.zeros((n,n),dtype=np.bool)
     for i in range(n):
         for j in range(n):
-            st1,en1=rectangles.slice2rect(*tiles[i].look)
-            st2,en2=rectangles.slice2rect(*tiles[j].look)
-            if rectangles.rectangle_intersection(st1,en1,st2,en2)[0]:
+            if not (tiles[i]&tiles[j]).empty:
                 X[i,j]=True
     return X
 
-
-def tile_up_nd(shp,inner_szs,border_szs,outer_border=True):
+def tile_up_nd(shp,inner_szs,border_szs=None,outer_border=True,last_edge_behavior='short'):
     '''
     Input:
     - shape
@@ -259,11 +283,18 @@ def tile_up_nd(shp,inner_szs,border_szs,outer_border=True):
     Output
     - a list of MultiTile objects
     '''
-    if outer_border:
-        lgps = [tile_up(sh,i,b) for (sh,i,b) in zip(shp,inner_szs,border_szs)]
-    else:
-        lgps = [tile_up_noborder(sh,i,b) for (sh,i,b) in zip(shp,inner_szs,border_szs)]
 
-    tiles=list(itertools.product(*lgps))
-    mt=[tiles2multitiles(*x) for x in tiles]
-    return mt
+    shp=np.require(shp,dtype=int)
+    inner_szs=np.require(inner_szs,dtype=int)
+    if border_szs is None:
+        border_szs=np.zeros(len(inner_szs),dtype=int)
+
+    if outer_border:
+        lgps = [tile_up(sh,i,b,last_edge_behavior) for (sh,i,b) in zip(shp,inner_szs,border_szs)]
+    else:
+        lgps = [tile_up_noborder(sh,i,b,last_edge_behavior) for (sh,i,b) in zip(shp,inner_szs,border_szs)]
+
+
+    lgps=list(itertools.product(*lgps))
+
+    return [math.prod(x,start=None) for x in lgps]

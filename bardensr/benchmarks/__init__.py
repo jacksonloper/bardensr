@@ -357,7 +357,7 @@ def load_h5py(fn):
     dct={}
     with h5py.File(fn,'r') as f:
         for nm in ['description','name','version','units']:
-            dct[nm]=f.attrs[nm]
+            dct[nm]=f.attrs[nm] if nm in f.attrs else None
         dct['X']=f['X'][:]
         dct['codebook']=f['codebook'][:]
 

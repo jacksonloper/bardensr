@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 
 
+
 @tf.function
 def _build_density(Xshfl,codes,lowg):
     nrms=tf.math.sqrt(tf.reduce_sum(Xshfl**2,axis=0,keepdims=True))
@@ -18,6 +19,18 @@ def build_density_from_tf(Xsh,codebook,lowg_constant):
     codebook=tf.reshape(codebook,(R*C,J))
     dots = _build_density(Xshfl,codebook,lowg_constant)
     return tf.reshape(dots,(M0,M1,M2,J))
+
+def build_density_and_spotcall_batched(getmini,codebook,slicetuples,use_gpus=False,use_tqdm_notebook=False, **kwargs):
+    results=misc.ray_batch(getmini,build_density_and_spotcall,slicetuples,
+        args=(codebook,),kwargs=kwargs,
+        use_gpus=use_gpus,use_tqdm_notebook=use_tqdm_notebook)
+
+    # concatenate results
+    raise NotImplementedError()
+
+
+def build_density_and_spotcall(Xsh,codebook,lowg_constant,thresh,poolsize):
+    raise NotImplementedError()
 
 def build_density(Xsh,codebook,lowg_factor=.0005,lowg_constant=None,double_precision=False):
     # Xsh -- R,C,M0,M1,M2
