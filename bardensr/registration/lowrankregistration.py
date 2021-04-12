@@ -6,12 +6,12 @@ import numbers
 import scipy as sp
 import scipy.optimize
 
-def _calc_loss(X,code,t,sz,interpolation_method='hermite'):
+def _calc_loss(X,code,t,sz):
     '''
     Proportion of the variance unexplained by using
     a single code to explain each pixel.
     '''
-    newX = kernels.floating_slices(X,t,sz,interpolation_method)
+    newX = kernels.floating_slices(X,t,sz,'hermite')
     dots=tf.einsum('fj,f...->...j',code,newX)
 
     mx = tf.reduce_max(dots,axis=-1)
@@ -21,7 +21,8 @@ def _calc_loss(X,code,t,sz,interpolation_method='hermite'):
     loss=1-tf.reduce_sum(mx**2)/tf.reduce_sum(X**2)
     return loss
 
-def _calc_loss_and_grad(X,code,t,sz,interpolation_method='hermite'):
+@tf.function
+def _calc_loss_and_grad(X,code,t,sz):
     '''
     X -- F x M0 x M1 x ... Mn
     code -- F x J
@@ -29,15 +30,44 @@ def _calc_loss_and_grad(X,code,t,sz,interpolation_method='hermite'):
     sz -- n
     '''
 
+    print("retracing!",
+        type(X),X.shape,X.device,X.dtype,
+        type(code),code.shape,code.device,code.dtype,
+        type(t),t.shape,t.device,t.dtype,
+        type(sz),sz.shape,sz.device,sz.dtype)
+
     with tf.GradientTape() as tape:
         tape.watch(t)
-        loss=_calc_loss(X,code,t,sz,interpolation_method)
+        loss=_calc_loss(X,code,t,sz)
 
     grad=tape.gradient(loss,t)
     return loss,grad
 
 
-def calc_loss_and_grad(mini,codebook,t,zero_padding=10,interpolation_method='hermite'):
+def compile_concrete_function(mini,codebook,t,zero_padding=10):
+    F=mini.shape[0]
+    nd=len(mini.shape)-1
+
+    if isinstance(zero_padding,numbers.Integral):
+        zero_padding=(zero_padding,)*nd
+    else:
+        assert len(zero_padding)==nd
+
+    minitf = tf.identity(mini.astype(np.float32))
+    codetf = tf.identity(codebook.astype(np.float32))
+    codetf=codetf/tf.math.sqrt(tf.reduce_sum(codetf**2,axis=0,keepdims=True))
+
+    # set up tf variables we need
+    zero_padding=np.require(zero_padding,dtype=np.int32)
+    xt=tf.convert_to_tensor(t,dtype=tf.float32)
+
+    # this is how much we'll pad inside the translation functions
+    sz=np.require(mini.shape[1:],dtype=np.int32)+zero_padding*2
+    sz=tf.convert_to_tensor(sz,dtype=tf.int32)
+
+    return _calc_loss_and_grad.get_concrete_function(minitf,codetf,xt,sz)
+
+def calc_loss_and_grad(mini,codebook,t,zero_padding=10):
     '''
     numpy interface to the loss function optimized by
     lowrankregister.  this function sill be slow,
@@ -61,7 +91,7 @@ def calc_loss_and_grad(mini,codebook,t,zero_padding=10,interpolation_method='her
     xt=tf.convert_to_tensor(t,dtype=tf.float32)
 
     # this is how much we'll pad inside the translation functions
-    sz=np.require(mini.shape[2:],dtype=np.int32)+zero_padding*2
+    sz=np.require(mini.shape[1:],dtype=np.int32)+zero_padding*2
     sz=tf.convert_to_tensor(sz,dtype=tf.int32)
 
     l,g=_calc_loss_and_grad(minitf,codetf,xt,
@@ -69,7 +99,7 @@ def calc_loss_and_grad(mini,codebook,t,zero_padding=10,interpolation_method='her
     return l.numpy(),g.numpy()
 
 
-def calc_loss(mini,codebook,t,zero_padding=10,interpolation_method='hermite'):
+def calc_loss(mini,codebook,t,zero_padding=10):
     '''
     numpy interface to the loss function optimized by
     lowrankregister.  this function sill be slow,
@@ -93,10 +123,10 @@ def calc_loss(mini,codebook,t,zero_padding=10,interpolation_method='hermite'):
     xt=tf.convert_to_tensor(t,dtype=tf.float32)
 
     # this is how much we'll pad inside the translation functions
-    sz=np.require(mini.shape[2:],dtype=np.int32)+zero_padding*2
+    sz=np.require(mini.shape[1:],dtype=np.int32)+zero_padding*2
     sz=tf.convert_to_tensor(sz,dtype=tf.int32)
 
-    l=_calc_loss(minitf,codetf,xt,sz,interpolation_method=interpolation_method)
+    l=_calc_loss(minitf,codetf,xt,sz)
     return l.numpy()
 
 
@@ -126,7 +156,7 @@ def minimize(method,inner_func,t,maxiter,momentum=0.8,lr=None,first_step_size=.1
 
         if lr is None:
             # pick LR by getting first step size
-            l,g=inner_func(t)
+            l,g=inner_func(tf.convert_to_tensor(t))
             if first_step_size_norm=='max':
                 mag=np.abs(g.numpy()).max()
             elif first_step_size_norm=='l2':
@@ -137,7 +167,7 @@ def minimize(method,inner_func,t,maxiter,momentum=0.8,lr=None,first_step_size=.1
 
         opt=tf.optimizers.SGD(momentum=momentum,lr=lr)
         for i in range(maxiter):
-            l,g=inner_func(t)
+            l,g=inner_func(tf.convert_to_tensor(t))
             losses.append(l.numpy())
             ts.append(t.numpy().copy())
             if counter is not None:
@@ -150,20 +180,20 @@ def minimize(method,inner_func,t,maxiter,momentum=0.8,lr=None,first_step_size=.1
 
 
 def lowrankregister(mini,codebook,zero_padding=10,
-            use_tqdm_notebook=False,niter=50,interpolation_method='hermite',
+            use_tqdm_notebook=False,niter=50,
             optimization_method='sgd',
-            optimization_settings=None):
+            optimization_settings=None,concrete_func=None):
     ts,losses,optim=_lowrankregister(mini,codebook,zero_padding=zero_padding,
             use_tqdm_notebook=use_tqdm_notebook,niter=niter,
-            interpolation_method=interpolation_method,
             optimization_method=optimization_method,
-            optimization_settings=optimization_settings)
+            optimization_settings=optimization_settings,
+            concrete_func=concrete_func)
     return ts[-1]
 
 def _lowrankregister(mini,codebook,zero_padding=10,
-            use_tqdm_notebook=False,niter=50,interpolation_method='hermite',
+            use_tqdm_notebook=False,niter=50,
             optimization_method='sgd',
-            optimization_settings=None):
+            optimization_settings=None,concrete_func=None):
     '''
     Input
     * mini          -- F x M0 x M1 x M2 x ... M(n-1)
@@ -177,6 +207,9 @@ def _lowrankregister(mini,codebook,zero_padding=10,
     '''
     F=mini.shape[0]
     nd=len(mini.shape)-1
+
+    if concrete_func is None:
+        concrete_func=_calc_loss_and_grad
 
     if optimization_settings is None:
         optimization_settings={}
@@ -194,6 +227,7 @@ def _lowrankregister(mini,codebook,zero_padding=10,
     # set up tf variables we need
     zero_padding=np.require(zero_padding,dtype=np.int32)
     t=np.zeros((F,nd))-zero_padding
+    t=tf.convert_to_tensor(t,dtype=tf.float32)
 
     # this is how much we'll pad inside the translation functions
     sz=np.require(mini.shape[1:],dtype=np.int32)+zero_padding*2
@@ -202,8 +236,7 @@ def _lowrankregister(mini,codebook,zero_padding=10,
 
     # gradient descent
     def inner_func(xt):
-        return _calc_loss_and_grad(minitf,codetf,xt,
-                sz,interpolation_method=interpolation_method)
+        return concrete_func(minitf,codetf,xt,sz)
 
     if use_tqdm_notebook:
         import tqdm.notebook

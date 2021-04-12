@@ -3,7 +3,6 @@ from .. import misc
 import numpy.random as npr
 import pandas as pd
 import scipy as sp
-from .. import meshes
 from . import locsdf
 
 import logging
@@ -58,6 +57,7 @@ def prepare_meshes_for_benchmark(meshlist,pitch,poisson_rate,num_workers=1,use_t
     '''
 
     import trimesh
+    from .. import meshes
 
     #########################################
     # voxelize!
@@ -89,7 +89,7 @@ def prepare_meshes_for_benchmark(meshlist,pitch,poisson_rate,num_workers=1,use_t
 
     # get a list of all locations in GT voxels
     # note that locs are not unique, i.e. we may have locs[3]==locs[4]
-    # as long as js[3]!=js[4].  
+    # as long as js[3]!=js[4].
     locs, js = locsdf.df_to_locs_and_j(GT_voxels)
 
     # for each (nonunique!) location

@@ -3,11 +3,16 @@ import scipy as sp
 import itertools
 from . import rectangles
 import dataclasses
-import math
 
 import collections
 
 Tile=collections.namedtuple('Tile',['look','grab','put'])
+
+def prod(lst,start):
+    a=start
+    for l in lst:
+        a=a*l
+    return a
 
 @dataclasses.dataclass
 class LookGrabPut:
@@ -45,7 +50,7 @@ def tile_up_simple(start,stop,sz):
 
 def tile_up_simple_nd(starts,stops,szs):
     ls=[tile_up_simple(l,s,b) for (l,s,b) in zip(starts,stops,szs)]
-    return [math.prod(x,start=None) for x in itertools.product(*ls)]
+    return [prod(x,start=None) for x in itertools.product(*ls)]
 
 
 
@@ -297,4 +302,4 @@ def tile_up_nd(shp,inner_szs,border_szs=None,outer_border=True,last_edge_behavio
 
     lgps=list(itertools.product(*lgps))
 
-    return [math.prod(x,start=None) for x in lgps]
+    return [prod(x,start=None) for x in lgps]
