@@ -134,7 +134,9 @@ def apply_small_affine_registrations(X,affines,sz=None,constant_values=0,
 
 
 def apply_small_affine_registration(X,affine,sz=None,constant_values=0,
-                                                interpolation_method='nearest'):
+                                                interpolation_method='nearest',
+                                                use_tqdm_notebook=False,
+                                                out_dtype=np.float32):
     '''
     Input
     - X       -- M0 x M1 x ... M(n-1)
@@ -169,11 +171,13 @@ def apply_small_affine_registration(X,affine,sz=None,constant_values=0,
     # check if we can get good rectangle
     rect=calc_reasonable_rectangles(affine[:,:n])
 
-    # get answer, in tiles
-    Y=np.zeros(sz,dtype=X.dtype)
+    # use those tiles
     tiles=tiling.tile_up_nd(sz,rect)
 
-    for tile in tiles:
+    targets=[]
+    values=[]
+
+    for tile in misc.maybe_tqdm(tiles,use_tqdm_notebook):
         # get a coordinate in the center of the tile
         lc=tile.look.center.astype(int) # in global coords of Y
         gc=tile.grab.center.astype(int) # in local tile coords
@@ -187,13 +191,18 @@ def apply_small_affine_registration(X,affine,sz=None,constant_values=0,
 
         # so now Y[f][tile.look][0,0,0]... = X[f][translation_at_start]
         # stick it in
-        Y[tile.look.as_slices]=kernels.floating_slice(
+        targets.append(tile.look.as_slices)
+        values.append(kernels.floating_slice(
             X,
             translation_at_start,
             tf.cast(tile.look.size,tf.int32),
-            interpolation_method='nearest',
+            interpolation_method=interpolation_method,
             constant_values=constant_values
-        )
+        ))
+
+    Y=np.zeros(X.shape,dtype=out_dtype)
+    for t,v in zip(misc.maybe_tqdm(targets,use_tqdm_notebook),values):
+        Y[t]=v.numpy()
 
     return Y
 

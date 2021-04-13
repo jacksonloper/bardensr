@@ -21,7 +21,6 @@ def _calc_loss(X,code,t,sz):
     loss=1-tf.reduce_sum(mx**2)/tf.reduce_sum(X**2)
     return loss
 
-@tf.function
 def _calc_loss_and_grad(X,code,t,sz):
     '''
     X -- F x M0 x M1 x ... Mn
@@ -29,12 +28,6 @@ def _calc_loss_and_grad(X,code,t,sz):
     t -- F x n
     sz -- n
     '''
-
-    print("retracing!",
-        type(X),X.shape,X.device,X.dtype,
-        type(code),code.shape,code.device,code.dtype,
-        type(t),t.shape,t.device,t.dtype,
-        type(sz),sz.shape,sz.device,sz.dtype)
 
     with tf.GradientTape() as tape:
         tape.watch(t)
@@ -44,28 +37,20 @@ def _calc_loss_and_grad(X,code,t,sz):
     return loss,grad
 
 
-def compile_concrete_function(mini,codebook,t,zero_padding=10):
-    F=mini.shape[0]
-    nd=len(mini.shape)-1
+def compile_lowrank_registration_functions(RC,nd=3):
+    class LowrankRegistrationFunctions(tf.Module):
+        @tf.function
+        def calc_loss_and_grad(self,X,code,t,sz):
+            return _calc_loss_and_grad(X,code,t,sz)
 
-    if isinstance(zero_padding,numbers.Integral):
-        zero_padding=(zero_padding,)*nd
-    else:
-        assert len(zero_padding)==nd
-
-    minitf = tf.identity(mini.astype(np.float32))
-    codetf = tf.identity(codebook.astype(np.float32))
-    codetf=codetf/tf.math.sqrt(tf.reduce_sum(codetf**2,axis=0,keepdims=True))
-
-    # set up tf variables we need
-    zero_padding=np.require(zero_padding,dtype=np.int32)
-    xt=tf.convert_to_tensor(t,dtype=tf.float32)
-
-    # this is how much we'll pad inside the translation functions
-    sz=np.require(mini.shape[1:],dtype=np.int32)+zero_padding*2
-    sz=tf.convert_to_tensor(sz,dtype=tf.int32)
-
-    return _calc_loss_and_grad.get_concrete_function(minitf,codetf,xt,sz)
+    cw=LowrankRegistrationFunctions()
+    cw.calc_loss_and_grad.get_concrete_function(
+        tf.TensorSpec([RC,None,None,None]),
+        tf.TensorSpec([RC,None]),
+        tf.TensorSpec([RC,3]),
+        tf.TensorSpec([3],dtype=tf.int32),
+    )
+    return cw
 
 def calc_loss_and_grad(mini,codebook,t,zero_padding=10):
     '''
@@ -182,18 +167,20 @@ def minimize(method,inner_func,t,maxiter,momentum=0.8,lr=None,first_step_size=.1
 def lowrankregister(mini,codebook,zero_padding=10,
             use_tqdm_notebook=False,niter=50,
             optimization_method='sgd',
-            optimization_settings=None,concrete_func=None):
+            optimization_settings=None,
+            compiled_functions=None):
     ts,losses,optim=_lowrankregister(mini,codebook,zero_padding=zero_padding,
             use_tqdm_notebook=use_tqdm_notebook,niter=niter,
             optimization_method=optimization_method,
             optimization_settings=optimization_settings,
-            concrete_func=concrete_func)
+            compiled_functions=compiled_functions)
     return ts[-1]
 
 def _lowrankregister(mini,codebook,zero_padding=10,
             use_tqdm_notebook=False,niter=50,
             optimization_method='sgd',
-            optimization_settings=None,concrete_func=None):
+            optimization_settings=None,
+            compiled_functions=None):
     '''
     Input
     * mini          -- F x M0 x M1 x M2 x ... M(n-1)
@@ -208,8 +195,10 @@ def _lowrankregister(mini,codebook,zero_padding=10,
     F=mini.shape[0]
     nd=len(mini.shape)-1
 
-    if concrete_func is None:
-        concrete_func=_calc_loss_and_grad
+    if compiled_functions is None:
+        clag=_calc_loss_and_grad
+    else:
+        clag=compiled_functions.calc_loss_and_grad
 
     if optimization_settings is None:
         optimization_settings={}
@@ -219,9 +208,16 @@ def _lowrankregister(mini,codebook,zero_padding=10,
     else:
         assert len(zero_padding)==nd
 
+    if tf.is_tensor(mini):
+        minitf = tf.cast(tf.identity(mini),dtype=tf.float32)
+    else:
+        minitf = tf.identity(mini.astype(np.float32))
 
-    minitf = tf.identity(mini.astype(np.float32))
-    codetf = tf.identity(codebook.astype(np.float32))
+    if tf.is_tensor(codebook):
+        codetf = tf.identity(codebook.astype(np.float32))
+    else:
+        codetf = tf.cast(tf.identity(codebook),dtype=tf.float32)
+
     codetf=codetf/tf.math.sqrt(tf.reduce_sum(codetf**2,axis=0,keepdims=True))
 
     # set up tf variables we need
@@ -236,7 +232,7 @@ def _lowrankregister(mini,codebook,zero_padding=10,
 
     # gradient descent
     def inner_func(xt):
-        return concrete_func(minitf,codetf,xt,sz)
+        return clag(minitf,codetf,xt,sz)
 
     if use_tqdm_notebook:
         import tqdm.notebook

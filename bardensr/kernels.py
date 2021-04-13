@@ -156,7 +156,7 @@ def floating_slice(X,t,sz,interpolation_method,constant_values=0,name=None):
         with tf.name_scope("bigslices"):
 
             shp=tf.shape(X)
-            left_slicein=tf.clip_by_value(tic-2,0,tic.dtype.max)
+            left_slicein=tf.clip_by_value(tic-2,0,shp-2)
             right_doable_size=tf.clip_by_value(left_slicein+sz+2,0,shp-left_slicein) # left_slicein+doable_sz <=shp
 
             X=tf.slice(X,left_slicein,right_doable_size)
@@ -166,7 +166,7 @@ def floating_slice(X,t,sz,interpolation_method,constant_values=0,name=None):
         STEP 2.  Bitty bits.
         '''
 
-        p=t%1
+        p=tf.cast(tf.cast(t,dtype=tf.float64)%1,dtype=t.dtype)
         for d in range(t.shape[0]):
             if interpolation_method=='hermite': # Y=X[p-1:shp+p]
                 X = hermite_small_translation_1d_padded(X,d,p[d])
@@ -512,19 +512,15 @@ def gaussian_filter_1d(X,sigma,axis):
     filt=filt/tf.reduce_sum(filt)
     filt=filt[:,None,None] # width x 1 x 1
 
-    # now we got to transpose X annoyingly
-
+    # transpose X so that the spatial dimension is at the end
     axes=list(range(len(X.shape)))
     axes[-1],axes[axis]=axes[axis],axes[-1]
-
     X_transposed=tf.transpose(X,axes) # everythingelse x axis x 1
 
-    newshp=(np.prod(X_transposed.shape[:-1]),X_transposed.shape[-1],1)
-    X_transposed_reshaped=tf.reshape(X_transposed,newshp)
+    # do convolution
+    X_convolved_transposed=tf.nn.conv1d(X_transposed[...,None],filt,1,'SAME')[...,0]
 
-    X_convolved=tf.nn.conv1d(X_transposed_reshaped,filt,1,'SAME')
-    X_convolved_reshaped=tf.reshape(X_convolved,X_transposed.shape)
+    # transpose back
+    X_convolved=tf.transpose(X_convolved_transposed,axes)
 
-    X_convolved_reshaped_transposed=tf.transpose(X_convolved_reshaped,axes)
-
-    return X_convolved_reshaped_transposed
+    return X_convolved

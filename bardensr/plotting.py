@@ -275,8 +275,11 @@ def lutup(A,B,C,D,sc=.5,normstyle='none'):
     ])*sc
 
     rez = np.einsum('l...,l...c->...c',data,colors)
+
     rez=np.clip(rez,0,1)
+
     rez=(rez*255).astype(np.uint8)
+
     return rez
 
 def gify(X,sc=.5,normeach=False,duration=250):

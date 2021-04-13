@@ -1,7 +1,31 @@
 import numpy as np
+import tempfile
+import zipfile
+import io
+import os
+import shutil
+import tensorflow as tf
 
 def argmax_nd(x):
     return np.unravel_index(np.argmax(x),x.shape)
+
+def tf_model_to_wire(model):
+    # save to the wire
+    with tempfile.TemporaryDirectory() as tempdirname:
+        tf.saved_model.save(model,tempdirname)
+        shutil.make_archive(tempdirname+"/packed",'zip',tempdirname)
+        with open(tempdirname+"/packed.zip",'rb') as f:
+            packed_zipfile_string=f.read()
+    return packed_zipfile_string
+
+def tf_model_from_wire(s):
+    # get out of the wire
+    with tempfile.TemporaryDirectory() as tempdirname,io.BytesIO(s) as packed_zipfile_io:
+        with zipfile.ZipFile(packed_zipfile_io) as zf:
+            zf.extractall(tempdirname)
+        model=tf.saved_model.load(tempdirname)
+
+    return model
 
 def calc_circum(V):
     '''
