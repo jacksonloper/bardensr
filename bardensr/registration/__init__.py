@@ -102,6 +102,10 @@ def estimate_affine_registrations(points,translations):
     - points        -- Q x n
     - translations  -- Q x F x n
 
+    Output:
+    - affines_est, F x n x (n+1)
+    - proportion_variance_unexplained, scalar
+
     For each q in 0.... (Q-1), we assume we have attempted
     a translation-based registration effort.  We assume
     this effort was focused on indices centered at points[q],
@@ -116,12 +120,17 @@ def estimate_affine_registrations(points,translations):
     '''
     q,F,n=translations.shape
     tcs_with_one = np.c_[points,np.ones(len(points))]
+    # ts_recentered = translations-np.mean(translations,axis=1,keepdims=True)
     ts_recentered = translations-translations[:,[0],:]
     affines_est=np.linalg.lstsq(tcs_with_one,ts_recentered.reshape((q,-1)),rcond=None)[0]
+
+    affine_reconstruction = tcs_with_one@affines_est
+    residual = affine_reconstruction - ts_recentered.reshape((q,-1))
+
     affines_est=affines_est.reshape((n+1,F,n))
     affines_est=np.swapaxes(affines_est,0,1)
     affines_est=np.swapaxes(affines_est,2,1)
-    return affines_est
+    return affines_est, residual
 
 
 def apply_small_affine_registrations(X,affines,sz=None,constant_values=0,
@@ -136,7 +145,7 @@ def apply_small_affine_registrations(X,affines,sz=None,constant_values=0,
 def apply_small_affine_registration(X,affine,sz=None,constant_values=0,
                                                 interpolation_method='nearest',
                                                 use_tqdm_notebook=False,
-                                                out_dtype=np.float32):
+                                                out_dtype=None):
     '''
     Input
     - X       -- M0 x M1 x ... M(n-1)
@@ -164,6 +173,12 @@ def apply_small_affine_registration(X,affine,sz=None,constant_values=0,
 
     if sz is None:
         sz=X.shape
+
+    if out_dtype is None:
+        out_dtype = X.dtype
+
+    # send X to tensorflow
+    X=tf.identity(X)
 
     sz=np.require(sz,dtype=int)
     n=len(sz)

@@ -44,6 +44,11 @@ def hermite_interpolation(val1,deriv1,val2,deriv2,t):
 
     All shapes must be broadcastable to each other.
 
+    val1,deriv1,val2,deriv2 must be same dtype,
+    and output will have this dtype.
+
+    t can (and perhaps should) have higher precision.
+
     Output: hermite cubic interpolation on the unit
     interval.  That is, we imagine
 
@@ -64,8 +69,13 @@ def hermite_interpolation(val1,deriv1,val2,deriv2,t):
         h01 = -2*t3 + 3*t2
         h11 = t3 - t2
 
-        return h00*val1 + h10*deriv1 + h01*val2 + h11*deriv2
+        # h00*val1 + h10*deriv1 + h01*val2 + h11*deriv2
+        msm=mixed_precision_multo
+        return msm(h00,val1) + msm(h10,deriv1) + msm(h01,val2) + msm(h11,deriv2)
 
+
+def mixed_precision_multo(a,b):
+    return tf.cast(a,dtype=b.dtype)*b
 
 def linear_interpolation(val1,val2,t):
     '''
@@ -85,7 +95,10 @@ def linear_interpolation(val1,val2,t):
     and we are trying to get a reasonable value for f(t)
     '''
     with tf.name_scope("linear_interpolation"):
-        return val1*(1-t) + val2*t
+        msm=mixed_precision_multo
+
+        # val1*(1-t) + val2*t
+        return msm(1-t,val1) + msm(t,val2)
 
 
 def floating_slices(X,t,sz,interpolation_method,cval=0):
@@ -141,7 +154,6 @@ def floating_slice(X,t,sz,interpolation_method,constant_values=0,name=None):
     with tf.name_scope(name):
 
         with tf.name_scope("casting"):
-            t=tf.cast(t,dtype=X.dtype)
             tic=tf.cast(t,dtype=tf.int32)
             sz=tf.cast(sz,dtype=tf.int32)
 
@@ -166,7 +178,7 @@ def floating_slice(X,t,sz,interpolation_method,constant_values=0,name=None):
         STEP 2.  Bitty bits.
         '''
 
-        p=tf.cast(tf.cast(t,dtype=tf.float64)%1,dtype=t.dtype)
+        p=t%1
         for d in range(t.shape[0]):
             if interpolation_method=='hermite': # Y=X[p-1:shp+p]
                 X = hermite_small_translation_1d_padded(X,d,p[d])
@@ -507,10 +519,11 @@ def gaussian_filter_1d(X,sigma,axis):
 
     filters X over axis
     '''
-    xs=tf.cast(tf.range(-sigma*3+1,sigma*3+2),dtype=X.dtype)
+    xs=tf.cast(tf.range(-sigma*3+1,sigma*3+2),dtype=tf.float64)
     filt=tf.math.exp(-.5*xs**2/(sigma*sigma))
     filt=filt/tf.reduce_sum(filt)
     filt=filt[:,None,None] # width x 1 x 1
+    filt=tf.cast(filt,dtype=X.dtype)
 
     # transpose X so that the spatial dimension is at the end
     axes=list(range(len(X.shape)))

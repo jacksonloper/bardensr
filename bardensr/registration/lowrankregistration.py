@@ -2,55 +2,32 @@ import numpy as np
 import tensorflow as tf
 from .. import misc
 from .. import kernels
+from . import lowrankregistration_tf
 import numbers
 import scipy as sp
 import scipy.optimize
 
-def _calc_loss(X,code,t,sz):
-    '''
-    Proportion of the variance unexplained by using
-    a single code to explain each pixel.
-    '''
-    newX = kernels.floating_slices(X,t,sz,'hermite')
-    dots=tf.einsum('fj,f...->...j',code,newX)
+def _procminicode(mini,codebook,zero_padding):
+    minitf = tf.identity(mini)
+    codetf = tf.identity(codebook)
+    codetf = tf.cast(codebook,dtype=tf.float64)
+    codetf = codetf/tf.math.sqrt(tf.reduce_sum(codetf**2,axis=0,keepdims=True))
+    codetf = tf.cast(codetf,dtype=minitf.dtype)
 
-    mx = tf.reduce_max(dots,axis=-1)
-    # weights = tf.nn.softmax(dots,axis=-1)
-    # mx = dots*weights
+    F=mini.shape[0]
+    nd=len(mini.shape)-1
 
-    loss=1-tf.reduce_sum(mx**2)/tf.reduce_sum(X**2)
-    return loss
+    if isinstance(zero_padding,numbers.Integral):
+        zero_padding=(zero_padding,)*nd
+    else:
+        assert len(zero_padding)==nd
+    zero_padding=np.require(zero_padding,dtype=np.int32)
 
-def _calc_loss_and_grad(X,code,t,sz):
-    '''
-    X -- F x M0 x M1 x ... Mn
-    code -- F x J
-    t -- F x n
-    sz -- n
-    '''
+    # this is how much we'll pad inside the translation functions
+    sz=np.require(mini.shape[1:],dtype=np.int32)+zero_padding*2
+    sz=tf.identity(sz)
 
-    with tf.GradientTape() as tape:
-        tape.watch(t)
-        loss=_calc_loss(X,code,t,sz)
-
-    grad=tape.gradient(loss,t)
-    return loss,grad
-
-
-def compile_lowrank_registration_functions(RC,nd=3):
-    class LowrankRegistrationFunctions(tf.Module):
-        @tf.function
-        def calc_loss_and_grad(self,X,code,t,sz):
-            return _calc_loss_and_grad(X,code,t,sz)
-
-    cw=LowrankRegistrationFunctions()
-    cw.calc_loss_and_grad.get_concrete_function(
-        tf.TensorSpec([RC,None,None,None]),
-        tf.TensorSpec([RC,None]),
-        tf.TensorSpec([RC,3]),
-        tf.TensorSpec([3],dtype=tf.int32),
-    )
-    return cw
+    return minitf,codetf,zero_padding,sz
 
 def calc_loss_and_grad(mini,codebook,t,zero_padding=10):
     '''
@@ -59,30 +36,26 @@ def calc_loss_and_grad(mini,codebook,t,zero_padding=10):
     because it performs quite a few preprocessing steps to convert
     from numpy-land to superfast tensorflow land.
     '''
-    F=mini.shape[0]
-    nd=len(mini.shape)-1
-
-    if isinstance(zero_padding,numbers.Integral):
-        zero_padding=(zero_padding,)*nd
-    else:
-        assert len(zero_padding)==nd
-
-    minitf = tf.identity(mini.astype(np.float32))
-    codetf = tf.identity(codebook.astype(np.float32))
-    codetf=codetf/tf.math.sqrt(tf.reduce_sum(codetf**2,axis=0,keepdims=True))
+    # get mini,code,zp ready for tensorflow
+    minitf,codetf,zero_padding,sz=_procminicode(mini,codebook,zero_padding)
 
     # set up tf variables we need
-    zero_padding=np.require(zero_padding,dtype=np.int32)
-    xt=tf.convert_to_tensor(t,dtype=tf.float32)
+    xt=tf.cast(tf.identity(t),dtype=tf.float64)
 
-    # this is how much we'll pad inside the translation functions
-    sz=np.require(mini.shape[1:],dtype=np.int32)+zero_padding*2
-    sz=tf.convert_to_tensor(sz,dtype=tf.int32)
+    # get loss
+    l,g=lowrankregistration_tf._calc_loss_and_grad(minitf,codetf,xt,sz)
 
-    l,g=_calc_loss_and_grad(minitf,codetf,xt,
-        sz,interpolation_method=interpolation_method)
+    # send back to numpyland
     return l.numpy(),g.numpy()
 
+
+def precompile_tensorflow_code_for(mini,codebook,zero_padding=10):
+    F=mini.shape[0]
+    nd=len(mini.shape)-1
+    t=np.zeros((F,nd))-zero_padding
+    t=tf.identity(t)
+    t=tf.cast(t,dtype=tf.float64)
+    calc_loss_and_grad(mini,codebook,t,zero_padding)
 
 def calc_loss(mini,codebook,t,zero_padding=10):
     '''
@@ -91,29 +64,17 @@ def calc_loss(mini,codebook,t,zero_padding=10):
     because it performs quite a few preprocessing steps to convert
     from numpy-land to superfast tensorflow land.
     '''
-    F=mini.shape[0]
-    nd=len(mini.shape)-1
-
-    if isinstance(zero_padding,numbers.Integral):
-        zero_padding=(zero_padding,)*nd
-    else:
-        assert len(zero_padding)==nd
-
-    minitf = tf.identity(mini.astype(np.float32))
-    codetf = tf.identity(codebook.astype(np.float32))
-    codetf=codetf/tf.math.sqrt(tf.reduce_sum(codetf**2,axis=0,keepdims=True))
+    # get mini,code,zp ready for tensorflow
+    minitf,codetf,zero_padding,sz=_procminicode(mini,codebook,zero_padding)
 
     # set up tf variables we need
-    zero_padding=np.require(zero_padding,dtype=np.int32)
-    xt=tf.convert_to_tensor(t,dtype=tf.float32)
+    xt=tf.cast(tf.identity(t),dtype=tf.float64)
 
-    # this is how much we'll pad inside the translation functions
-    sz=np.require(mini.shape[1:],dtype=np.int32)+zero_padding*2
-    sz=tf.convert_to_tensor(sz,dtype=tf.int32)
+    # get loss
+    l=lowrankregistration_tf._calc_scaled_loss(minitf,codetf,xt,sz)
 
-    l=_calc_loss(minitf,codetf,xt,sz)
+    # send back to numpyland
     return l.numpy()
-
 
 def minimize(method,inner_func,t,maxiter,momentum=0.8,lr=None,first_step_size=.1,first_step_size_norm='max',counter=None):
     losses=[]
@@ -196,39 +157,20 @@ def _lowrankregister(mini,codebook,zero_padding=10,
     nd=len(mini.shape)-1
 
     if compiled_functions is None:
-        clag=_calc_loss_and_grad
+        clag=lowrankregistration_tf._calc_loss_and_grad
     else:
         clag=compiled_functions.calc_loss_and_grad
 
     if optimization_settings is None:
         optimization_settings={}
 
-    if isinstance(zero_padding,numbers.Integral):
-        zero_padding=(zero_padding,)*nd
-    else:
-        assert len(zero_padding)==nd
-
-    if tf.is_tensor(mini):
-        minitf = tf.cast(tf.identity(mini),dtype=tf.float32)
-    else:
-        minitf = tf.identity(mini.astype(np.float32))
-
-    if tf.is_tensor(codebook):
-        codetf = tf.identity(codebook.astype(np.float32))
-    else:
-        codetf = tf.cast(tf.identity(codebook),dtype=tf.float32)
-
-    codetf=codetf/tf.math.sqrt(tf.reduce_sum(codetf**2,axis=0,keepdims=True))
+    # get mini,code,zp ready for tensorflow
+    minitf,codetf,zero_padding,sz=_procminicode(mini,codebook,zero_padding)
 
     # set up tf variables we need
-    zero_padding=np.require(zero_padding,dtype=np.int32)
     t=np.zeros((F,nd))-zero_padding
-    t=tf.convert_to_tensor(t,dtype=tf.float32)
-
-    # this is how much we'll pad inside the translation functions
-    sz=np.require(mini.shape[1:],dtype=np.int32)+zero_padding*2
-    sz=tf.convert_to_tensor(sz,dtype=tf.int32)
-
+    t=tf.identity(t)
+    t=tf.cast(t,dtype=tf.float64)
 
     # gradient descent
     def inner_func(xt):
