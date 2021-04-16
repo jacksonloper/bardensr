@@ -375,7 +375,7 @@ def load_h5py(fn):
         else:
             dct['GT_voxels']=None
 
-        if 'GT_voxels' in f:
+        if 'GT_meshes' in f:
             mesh_list = []
             for i in range(len(f['GT_meshes'])):
                 vertices =  f['GT_meshes/'+str(i)+'/vertices']

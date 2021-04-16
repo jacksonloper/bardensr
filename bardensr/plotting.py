@@ -7,6 +7,9 @@ import subprocess
 from contextlib import contextmanager
 import IPython.display
 import collections
+import contextlib
+import tempfile
+import PIL
 
 from mpl_toolkits.mplot3d import Axes3D
 
@@ -62,11 +65,11 @@ def labelcolor(X,max):
     return X
 
 @contextmanager
-def pngs_to_mp4_async(fn):
+def pngs_to_mp4_async(fn,fps=12):
     import ffmpeg
     args = (
         ffmpeg
-        .input('pipe:', vcodec='png')
+        .input('pipe:', vcodec='png',r=fps)
         .output(fn, pix_fmt='yuv420p')
         .overwrite_output()
         .compile()
@@ -77,6 +80,53 @@ def pngs_to_mp4_async(fn):
         proc.stdin.close()
         proc.wait()
 
+@contextlib.contextmanager
+def AnimMp4(fps=6):
+    with tempfile.TemporaryDirectory() as dir_name:
+        fn=dir_name+'movie.mp4'
+        with pngs_to_mp4_async(dir_name+'movie.mp4',fps=fps) as p2ma:
+            am=_AnimMp4(p2ma)
+            yield am
+        am._finalize(fn)
+
+class _AnimMp4:
+    def __init__(self,p2ma):
+        self.p2ma=p2ma
+        self.size=None
+
+    def __call__(self,**kwargs):
+        with io.BytesIO() as f:
+            plt.gcf().savefig(f,format='png',bbox_inches='tight',**kwargs)
+            f.seek(0)
+            img=PIL.Image.open(f)
+
+            if self.size is None:
+                W,H=img.size
+                W=2*(W//2)
+                H=2*(H//2)
+                self.size=(W,H)
+
+            img=img.resize(self.size)
+
+        with io.BytesIO() as f:
+            img.save(f,format='png')
+            f.seek(0)
+            s=f.read()
+
+        self.p2ma.stdin.write(s)
+        plt.clf()
+
+    def _finalize(self,fn):
+        with open(fn,'rb') as f:
+            self._s=f.read()
+
+    def __invert__(self):
+        return IPython.display.Video(
+            data=self._s,
+            embed=True,
+            mimetype='video/mp4',
+            html_attributes='loop autoplay'
+        )
 
 def plot_roc_parametersweep(params,results,force_lim=True):
     import dataclasses
