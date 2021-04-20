@@ -23,9 +23,8 @@ def seek_barcodes(X,thre_onehot,proportion_good_rounds_required):
         # deduplicat
         channelchoicesfl=channelchoices.reshape((R,-1))
         barcodes_found=np.unique(channelchoicesfl[:,good],axis=-1).T
-
         # convert to a normal codebook form
-        barcodes_found=misc.convert_codebook_to_onehot_form(barcodes_found)
+        barcodes_found=misc.convert_codebook_to_onehot_form(barcodes_found, C=C)
 
         return barcodes_found
 
