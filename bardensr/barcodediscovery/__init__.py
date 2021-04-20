@@ -40,7 +40,7 @@ def codebook_deduplication_iteration(cb,thre=0,use_tqdm_notebook=False):
             new_cbs[:,best] = merge_barcodes(new_cbs[:,best],cb[:,i])
     return new_cbs.reshape((R,C,-1))
 
-def codebook_deduplication(cb,thre=0,use_tqdm_notebook=True):
+def codebook_deduplication(cb,thre=0,use_tqdm_notebook=False):
     R,C,J=cb.shape
     improved=True
     while improved:
@@ -65,16 +65,18 @@ def merge_codebooks(book1,book2,thre=0,use_tqdm_notebook=False):
 
 
 def get_denselearner_reconstruction(X,codebook,blob_radius=None,blur_level=0,
-                n_unused_barcodes=2,bardensr_spot_thresh_multiplier=1.0,niter=120,lam=.01):
+                                    n_unused_barcodes=2,bardensr_spot_thresh_multiplier=1.0,niter=120,lam=.01,
+                                    return_params = False
+                                   ):
     # add extra barcodes
     R,C,J=codebook.shape
     unused_barcodes=misc.convert_codebook_to_onehot_form(npr.randint(0,C,size=(n_unused_barcodes,R)))
     estimated_plus_phony = np.concatenate([codebook,unused_barcodes],axis=-1)
 
     # run bardensr
-    estimated_plus_phony[np.isnan(estimated_plus_phony)]=0.0
-    bdresult=singlefov.denselearner.build_density(X,estimated_plus_phony,use_tqdm_notebook=True,
-                                                          niter=niter,lam=lam,blur_level=blur_level)
+    estimated_plus_phony[np.isnan(estimated_plus_phony)]=0.0    
+    bdresult=singlefov.denselearner.build_density(X,estimated_plus_phony,use_tqdm_notebook=False,
+                                                              niter=niter,lam=lam,blur_level=blur_level)
 
     # get the reconstruction
     RD=bdresult.reconstruction_density.copy()
@@ -96,7 +98,10 @@ def get_denselearner_reconstruction(X,codebook,blob_radius=None,blur_level=0,
     # done!
     recon = np.einsum('xyzj,rcj->rcxyz',RD,bdresult.reconstruction_codebook)
 
-    return recon
+    if return_params:
+        return(recon, RD, bdresult.reconstruction_codebook)
+    else:
+        return recon
 
 
 def blurry_3d_nmf_lossfunc(data, G, F,blur):
@@ -540,3 +545,4 @@ def ellipsoid_dilation(mask, blob_radius):
     blob_radius=np.array(blob_radius)
     dilation_structure = skimage.draw.ellipsoid(*(blob_radius+1))[2:-2,2:-2,2:-2]
     return skimage.morphology.dilation(mask, dilation_structure)
+
