@@ -1,5 +1,6 @@
 import tensorflow as tf
-import dataclass
+import dataclasses
+import numpy as np
 
 def reconstruction(X,F,codebook,a,b,varphi,**kwargs):
     G = codebook*alpha[:,:,None]  # rcj
@@ -122,64 +123,64 @@ def cnuwb_speedify(lossfunc,nm,lo=0.0):
     return improve_F
 
 
-@dataclasses.dataclass
-class DensityResult:
-    density:np.ndarray
-    model:Model
+# @dataclasses.dataclass
+# class DensityResult:
+#     density:np.ndarray
+#     model:Model
 
-def build_density(Xsh,codebook,lam=1.0,use_tqdm_notebook=False,niter=60):
-    # Xsh -- R,C,M0,M1,M2
-    R,C,M0,M1,M2=Xsh.shape
-    J=codebook.shape[-1]
+# def build_density(Xsh,codebook,lam=1.0,use_tqdm_notebook=False,niter=60):
+#     # Xsh -- R,C,M0,M1,M2
+#     R,C,M0,M1,M2=Xsh.shape
+#     J=codebook.shape[-1]
 
-    Xsh=tf.convert_to_tensor(np.transpose(Xsh,[2,3,4,0,1]))
+#     Xsh=tf.convert_to_tensor(np.transpose(Xsh,[2,3,4,0,1]))
 
-    alpha=tf.zeros((M0,M1,M2,J),dtype=tf.float64)
-    a=tf.zeros((M0,M1,M2),dtype=tf.float64)
-    b=tf.zeros((R,C),dtype=tf.float64)
+#     alpha=tf.zeros((M0,M1,M2,J),dtype=tf.float64)
+#     a=tf.zeros((M0,M1,M2),dtype=tf.float64)
+#     b=tf.zeros((R,C),dtype=tf.float64)
 
-    varphi=tf.eye(C,dtype=tf.float64)
+#     varphi=tf.eye(C,dtype=tf.float64)
 
-    state=dict(
-        lam=tf.convert_to_tensor(lam,dtype=tf.float64),
-        X=X,
-        F=F,
-        a=a,
-        b=b,
-        alpha=alpha,
-        varphi=varphi,
-        codebook=tf.convert_to_tensor(codebook,dtype=tf.float64),
-    )
-
-
-    if use_tqdm_notebook:
-        import tqdm.notebook
-        t=tqdm.notebook.trange(niter)
-    else:
-        t=range(niter)
-    for i in t:
-
-        state['F']=improve_F(**state)
-        state['a']=improve_a(**state)
-        state['b']=improve_b(**state)
-        state['alpha']=improve_alpha(**state)
-
-    rez=calc_Fsc(**state).numpy()
-    rez=rez/rez.max()
-
-    return DensityResult(density=rez,model=state)
-
-'''
-
-'''
+#     state=dict(
+#         lam=tf.convert_to_tensor(lam,dtype=tf.float64),
+#         X=X,
+#         F=F,
+#         a=a,
+#         b=b,
+#         alpha=alpha,
+#         varphi=varphi,
+#         codebook=tf.convert_to_tensor(codebook,dtype=tf.float64),
+#     )
 
 
-'''
+#     if use_tqdm_notebook:
+#         import tqdm.notebook
+#         t=tqdm.notebook.trange(niter)
+#     else:
+#         t=range(niter)
+#     for i in t:
 
-'''
+#         state['F']=improve_F(**state)
+#         state['a']=improve_a(**state)
+#         state['b']=improve_b(**state)
+#         state['alpha']=improve_alpha(**state)
 
-improve_F = cnuwb_speedify(calc_loss,'F')
-improve_a = cnuwb_speedify(calc_loss,'a')
-improve_alpha = cnuwb_speedify(calc_loss,'alpha',1e-5)
-improve_b = cnuwb_speedify(calc_loss,'b')
-improve_varphi = cnuwb_speedify(calc_loss,'varphi',1e-5)
+#     rez=calc_Fsc(**state).numpy()
+#     rez=rez/rez.max()
+
+#     return DensityResult(density=rez,model=state)
+
+# '''
+
+# '''
+
+
+# '''
+
+# '''
+
+# improve_F = cnuwb_speedify(calc_loss,'F')
+# improve_a = cnuwb_speedify(calc_loss,'a')
+# improve_alpha = cnuwb_speedify(calc_loss,'alpha',1e-5)
+# improve_b = cnuwb_speedify(calc_loss,'b')
+# improve_varphi = cnuwb_speedify(calc_loss,'varphi',1e-5)
