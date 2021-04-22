@@ -217,6 +217,8 @@ def armijo_linesearch(lossfunc,prep,armijo_c1=1e-4,decay_rate=.5,maxiter=10):
         # get armijo constant
         armijo = (newloss - prep.loss) / (force*prep.sd_dot_grad)
 
+        print(armijo)
+
         if armijo>armijo_c1:
             break
         else:

@@ -1,11 +1,15 @@
+'''
+Adapted from scipy implementation of revised simplex method
+'''
+
 import tensorflow as tf
 import numpy as np
 from . import misc
 
 
-def tal(params,indices,axis):
+def tal(params,indices,axis=1):
     '''
-    out[b,i] = params[b,indices[b,i]]
+    out[b,i,...] = params[b,indices[b,i],...]
     '''
     return tf.gather(params,indices,axis,batch_dims=1)
 
@@ -20,10 +24,17 @@ def tal2(params,indices):
 
 def tal3(params,indices):
     '''
-    out[b,i] = params[indices[b],i]
+    out[b,...] = params[b,indices[b],...]
     '''
 
-    return tf.gather(params,indices,axis=0)
+    # stacked_indices[b,i] = (b,indices[b])
+    indices0 = tf.cast(tf.range(tf.shape(params)[0]),dtype=indices.dtype)
+    stacked_indices = tf.stack([indices0,indices],axis=1)
+
+    # out[b,i,...] = params[stacked_indices[b,i],...]
+    rez=tf.gather_nd(params,stacked_indices)
+
+    return rez
 
 def pal(tensor,indices,updates):
     '''
@@ -56,7 +67,7 @@ def solve_lp_batched(c,A,b,maxiter=100,tol=1e12,use_tqdm_notebook=False):
 
     Input:
     - c -- batch x n
-    - A -- m x n
+    - A -- batch x m x n
     - b -- batch x m
 
     Output
@@ -72,24 +83,22 @@ def solve_lp_batched(c,A,b,maxiter=100,tol=1e12,use_tqdm_notebook=False):
         s.t. x,y >=0
              A@x + y <=b
     '''
-    m,n=A.shape
+    batch,m,n=A.shape
 
-    batch=c.shape[0]
-
-    A_enlarged = np.concatenate([A,np.eye(m)],axis=1)
+    A_enlarged = np.concatenate([A,np.eye(m)[None,:,:]*np.ones(batch)[:,None,None]],axis=2)
     c_enlarged = np.concatenate([c,np.zeros((batch,m))],axis=1)
     x0 = np.concatenate([np.zeros((batch,n)),b],axis=1)
     basis=np.ones(batch,dtype=int)[:,None]*(np.r_[n:n+m])[None,:]
     not_basis=np.ones(batch,dtype=int)[:,None]*(np.r_[0:n])[None,:]
 
     c_enlarged=tf.identity(c_enlarged)
-    A_enlarged=tf.identity(A_enlarged)
+    AT_enlarged=tf.identity(np.transpose(A_enlarged,[0,2,1]))
     x0=tf.identity(x0)
     basis=tf.identity(basis)
     not_basis=tf.identity(not_basis)
 
     ########## solve the big problem #######
-    rez,status=phase_two_batched(c_enlarged,A_enlarged,x0,
+    rez,status=phase_two_batched(c_enlarged,AT_enlarged,x0,
         basis,not_basis,maxiter,1e-12,use_tqdm_notebook)
 
     ######## return the answer of interest #########
@@ -98,13 +107,23 @@ def solve_lp_batched(c,A,b,maxiter=100,tol=1e12,use_tqdm_notebook=False):
 
 @tf.function
 def phase_two_iteration(c,bAT,basis,not_basis,x,tol):
+    '''
+    let b = AT.T[:,basis] @ x
+
+    returns new and improved basis,not_basis,x,done for the
+    objective functions
+
+        min   <c[batch],x[batch]>
+        s.t.  x >= 0
+              A@x <= b[batch]
+
+    '''
+
     # compute some things we need
-    CURB_AT=tal2(bAT,basis[...,None]) # CURB_AT[b,i,j] = AT[b,basis[b,i],j]
-    CURB_A=tf.transpose(CURB_AT,[0,2,1])
+    CURB_AT = tal(bAT,basis) # CURB_AT[b,i,j] = AT[b,basis[b,i],j]
     CURB_c  = tal(c,basis,1) # CURB_c[b,i] = c[b,basis[i]]
 
-    CURNB_AT=tal2(bAT,not_basis[...,None])
-    CURNB_c = tal(c,not_basis,1)
+    CURNB_c = tal(c,not_basis,1) # CURNB_AT[b,i,j] = AT[b,not_basis[b,i],j]
 
     #######################
     # look for new guys to bring into basis
@@ -113,7 +132,10 @@ def phase_two_iteration(c,bAT,basis,not_basis,x,tol):
     v = tf.linalg.solve(CURB_AT,CURB_c[...,None])[...,0]
 
     # get c_hat on non-basis elts
-    c_hat = CURNB_c - tf.einsum('bij,bj->bi',CURNB_AT,v)
+    # (actually compute the einsum on all elts, cheaper
+    # to do this than to do the indexing ahead of time and store
+    # a bunch of big matrices!)
+    c_hat = CURNB_c - tal(tf.einsum('bij,bj->bi',bAT,v),not_basis)
 
     # check if we're done
     done=tf.reduce_all(c_hat >= -tol,axis=-1)
@@ -128,8 +150,8 @@ def phase_two_iteration(c,bAT,basis,not_basis,x,tol):
     # we will kick somebody out of the basis.  but who?
 
     # second solve.
-    Aj = tal3(bAT,j) # Aj[b,i] = AT[j[b],i]
-    u = tf.linalg.solve(CURB_A,Aj[...,None])[...,0]
+    Aj = tal3(bAT,j) # Aj[b,i] = AT[b,j[b],i]
+    u = tf.linalg.solve(CURB_AT,Aj[...,None],adjoint=True)[...,0]
 
     # among guys where u>tol, pick the guy where xb/u is SMALLEST
     CURB_x = tal(x,basis,1)
@@ -178,38 +200,33 @@ def phase_two_iteration(c,bAT,basis,not_basis,x,tol):
 
     return basis,not_basis,x,done
 
-def phase_two_batched(c, A, x, basis, not_basis, maxiter, tol,use_tqdm_notebook=False):
+def phase_two_batched(c, AT, x, basis, not_basis, maxiter, tol,use_tqdm_notebook=False):
     '''
     Input
     - c, batch x n
-    - A, m x n
+    - AT, batch x m x n
     - x, batch x n
     - basis, batch x m, integers in {0,1,...,n-1}
-    - not_basis, batch x n, integers in {0,1,...,n-1}
+    - not_basis, batch x (n-m), integers in {0,1,...,n-1}
     - maxiter, scalar
     - tol, scalar
 
-    let b = A[:,basis] @ x
+    let b = A[:,basis] @ x     (where A=AT.T)
 
     solves
 
-        min   <c,x>
-        s.t.  x>=0
-              A@x <= b
+        min   <c[batch],x[batch]>
+        s.t.  x >= 0
+              A[batch]@x <= b[batch]
 
-    notes
-    - we expect m<n
-    - this function mutates x and basis and not_basis
+    for each batch.
+
+    (note -- this algorithm only works if m<n)
 
     '''
 
-    batch=c.shape[0]
-    m, n = A.shape
-
-    bAT=tf.transpose(A)
-
     for iteration in misc.maybe_trange(maxiter,use_tqdm_notebook):
-        basis,not_basis,x,done=phase_two_iteration(c,bAT,basis,not_basis,x,tol)
+        basis,not_basis,x,done=phase_two_iteration(c,AT,basis,not_basis,x,tol)
 
 
     return x,done
