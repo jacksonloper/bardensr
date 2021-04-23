@@ -95,13 +95,14 @@ def maybe_tqdm_ray(jobs,use_tqdm_notebook):
         return [ray.get(x) for x in jobs]
 
 
-def convert_codebook_to_onehot_form(codebook):
+def convert_codebook_to_onehot_form(codebook,C=None):
     '''
     Input: codebook, JxR
     Output: codebook, RxCxJ
     '''
     J,R=codebook.shape
-    C=codebook.max()+1
+    if C == None:
+        C=codebook.max()+1
     codes=np.eye(C,dtype=np.float)
     codes=np.concatenate([codes,np.full((1,C),np.nan)],axis=0)
     codebook=codes[codebook.ravel()].reshape((J,R,C))
