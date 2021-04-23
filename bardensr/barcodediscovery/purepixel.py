@@ -4,8 +4,8 @@ from .. import misc
 def seek_barcodes(X,thre_onehot,proportion_good_rounds_required):
     R,C,M0,M1,M2=X.shape
     channelchoices=np.argmax(X,axis=1)
-    meanC=np.mean(X,axis=1)
-    mxC=np.max(X,axis=1)
+    meanC=np.mean(X,axis=1) # rounds x M0 x M1 x M2
+    mxC=np.max(X,axis=1)    # rounds x M0 x M1 x M2
 
     # get rounds which are deemed adequate.
     # channelchoice for inadequate rounds are marked with -1
@@ -16,13 +16,15 @@ def seek_barcodes(X,thre_onehot,proportion_good_rounds_required):
     scores=np.sum(satisfactory_round,axis=0)
 
     # collect the good ones
-    good=(scores>=proportion_good_rounds_required*R).ravel()
+    good=(scores>=proportion_good_rounds_required*R)
+
+    # put 'em out
     if np.sum(good)==0:
         return np.zeros((R,C,0),dtype=np.float)
     else:
         # deduplicat
         channelchoicesfl=channelchoices.reshape((R,-1))
-        barcodes_found=np.unique(channelchoicesfl[:,good],axis=-1).T
+        barcodes_found=np.unique(channelchoicesfl[:,good.ravel()],axis=-1).T
         # convert to a normal codebook form
         barcodes_found=misc.convert_codebook_to_onehot_form(barcodes_found, C=C)
 

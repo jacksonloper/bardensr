@@ -7,7 +7,6 @@ import scipy as sp
 import scipy.spatial
 from typing import Optional
 import tqdm
-import trimesh
 from .. import misc
 from . import simulations
 from . import locsdf
@@ -31,14 +30,20 @@ class BarcodePairing:
         self.book1_lookup=collections.defaultdict(set)
         self.book2_lookup=collections.defaultdict(set)
 
+        for i,j in self.pairing_list:
+            self.book1_lookup[i].add(j)
+            self.book2_lookup[j].add(i)
+
+        self.book1_matches=np.array([len(self.book1_lookup[j]) for j in self.book1_lookup])
+        self.book2_matches=np.array([len(self.book2_lookup[j]) for j in self.book2_lookup])
+
+
+        self.codes_in_book1_which_are_matched=np.unique(list(set.union(*self.book2_lookup.values())))
+        self.codes_in_book2_which_are_matched=np.unique(list(set.union(*self.book1_lookup.values())))
+
         if len(self.pairing_list)>0:
-
-            for i,j in self.pairing_list:
-                self.book1_lookup[i].add(j)
-                self.book2_lookup[j].add(i)
-
-            self.book1_maps_unambiguously = (np.max([len(self.book1_lookup[j]) for j in self.book1_lookup])<=1)
-            self.book2_maps_unambiguously = (np.max([len(self.book2_lookup[j]) for j in self.book2_lookup])<=1)
+            self.book1_maps_unambiguously = (np.max(self.book1_matches)<=1)
+            self.book2_maps_unambiguously = (np.max(self.book2_matches)<=1)
         else:
             self.book1_maps_unambiguously = True
             self.book2_maps_unambiguously = True
@@ -357,7 +362,7 @@ def load_h5py(fn):
     dct={}
     with h5py.File(fn,'r') as f:
         for nm in ['description','name','version','units']:
-            dct[nm]=f.attrs[nm]
+            dct[nm]=f.attrs[nm] if nm in f.attrs else None
         dct['X']=f['X'][:]
         dct['codebook']=f['codebook'][:]
 
@@ -381,6 +386,7 @@ def load_h5py(fn):
             for i in range(len(f['GT_meshes'])):
                 vertices =  f['GT_meshes/'+str(i)+'/vertices']
                 faces = f['GT_meshes/'+str(i)+'/faces']
+                import trimesh
                 mesh_list.append(trimesh.Trimesh(vertices, faces, process=False))
             dct['GT_meshes'] = mesh_list
         else:

@@ -6,6 +6,10 @@ from . import misc
 import subprocess
 from contextlib import contextmanager
 import IPython.display
+import collections
+import contextlib
+import tempfile
+import PIL
 
 from mpl_toolkits.mplot3d import Axes3D
 
@@ -61,11 +65,11 @@ def labelcolor(X,max):
     return X
 
 @contextmanager
-def pngs_to_mp4_async(fn):
+def pngs_to_mp4_async(fn,fps=12):
     import ffmpeg
     args = (
         ffmpeg
-        .input('pipe:', vcodec='png')
+        .input('pipe:', vcodec='png',r=fps)
         .output(fn, pix_fmt='yuv420p')
         .overwrite_output()
         .compile()
@@ -76,6 +80,53 @@ def pngs_to_mp4_async(fn):
         proc.stdin.close()
         proc.wait()
 
+@contextlib.contextmanager
+def AnimMp4(fps=6):
+    with tempfile.TemporaryDirectory() as dir_name:
+        fn=dir_name+'movie.mp4'
+        with pngs_to_mp4_async(dir_name+'movie.mp4',fps=fps) as p2ma:
+            am=_AnimMp4(p2ma)
+            yield am
+        am._finalize(fn)
+
+class _AnimMp4:
+    def __init__(self,p2ma):
+        self.p2ma=p2ma
+        self.size=None
+
+    def __call__(self,**kwargs):
+        with io.BytesIO() as f:
+            plt.gcf().savefig(f,format='png',bbox_inches='tight',**kwargs)
+            f.seek(0)
+            img=PIL.Image.open(f)
+
+            if self.size is None:
+                W,H=img.size
+                W=2*(W//2)
+                H=2*(H//2)
+                self.size=(W,H)
+
+            img=img.resize(self.size)
+
+        with io.BytesIO() as f:
+            img.save(f,format='png')
+            f.seek(0)
+            s=f.read()
+
+        self.p2ma.stdin.write(s)
+        plt.clf()
+
+    def _finalize(self,fn):
+        with open(fn,'rb') as f:
+            self._s=f.read()
+
+    def __invert__(self):
+        return IPython.display.Video(
+            data=self._s,
+            embed=True,
+            mimetype='video/mp4',
+            html_attributes='loop autoplay'
+        )
 
 def plot_roc_parametersweep(params,results,force_lim=True):
     import dataclasses
@@ -251,7 +302,7 @@ def focpt(m1,m2,bc,radius=10,j=None,X=None,**kwargs):
 
     plot_rbc(R,C,go,**kwargs)
 
-def lutup(A,B,C,D,sc=.5,normstyle='each'):
+def lutup(A,B,C,D,sc=.5,normstyle='none'):
     data=np.stack([A,B,C,D],axis=0).astype(float)
 
     if normstyle=='each':
@@ -261,6 +312,10 @@ def lutup(A,B,C,D,sc=.5,normstyle='each'):
     elif normstyle=='all':
         data-=np.min(data)
         data/=np.max(data)
+    elif normstyle=='none':
+        pass
+    else:
+        raise NotImplementedError(normstyle)
 
     colors=np.array([
         [1,2,4],  # BLUE!
@@ -270,8 +325,11 @@ def lutup(A,B,C,D,sc=.5,normstyle='each'):
     ])*sc
 
     rez = np.einsum('l...,l...c->...c',data,colors)
+
     rez=np.clip(rez,0,1)
+
     rez=(rez*255).astype(np.uint8)
+
     return rez
 
 def gify(X,sc=.5,normeach=False,duration=250):
@@ -408,3 +466,125 @@ class AnimAcross:
 
         if exc_type is not None:
             print(exc_type,exc_val,exc_tb)
+
+DirResult=collections.namedtuple('DirResult',['path','subdirs','nodes'])
+
+def get_graph_def_from_tf_concrete_function(cf):
+    gd=cf.graph.as_graph_def()
+
+    lk={x.name:i for (i,x) in enumerate(gd.node)}
+    node_attributes=[{} for i in range(len(gd.node))]
+    E=np.zeros((len(gd.node),len(gd.node)),dtype=np.bool)
+    for nd in gd.node:
+        node_attributes[lk[nd.name]]['name']=nd.name
+        if hasattr(nd,'attr') and 'value' in nd.attr:
+            node_attributes[lk[nd.name]]['value']='const'
+        for inp in nd.input:
+            E[lk[inp.split(":")[0]],lk[nd.name]]=True
+
+    allnames=[x['name'] for x in node_attributes]
+
+    nodes_hit=set()
+
+    grps=collections.defaultdict(lambda: (set(),set()))
+    for na in node_attributes:
+        nms=na['name'].split('/')
+        for i in range(len(nms)):
+            a='/'.join(nms[:i])
+            b='/'.join(nms[:i+1])
+            if b in allnames:
+                grps[a][1].add(b)
+                nodes_hit.add(b)
+        for i in range(len(nms)-1):
+            a='/'.join(nms[:i])
+            b='/'.join(nms[:i+1])
+            grps[a][0].add(b)
+
+    def walker(root=''):
+        dr=grps[root]
+        yield DirResult(root,*dr)
+        for sub in dr[0]:
+            yield from walker(sub)
+
+    return node_attributes,E,walker
+
+def tfgraphlook(gd):
+    import pygraphviz,collections
+    closed_directory_names=[]
+
+    HG_down=collections.defaultdict(set)
+    roots=set()
+    leaves=set()
+    lk={x.name:i for (i,x) in enumerate(gd.node)}
+
+    cdn_lookups={}
+
+    for nd in gd.node:
+        nm=nd.name
+        for cdn in closed_directory_names:
+            if cdn in nd.name:
+                cdn=nd.name[:nd.name.find(cdn)+len(cdn)]
+                cdn_lookups[nm]=cdn
+                nm=cdn
+
+        leaves.add(nm)
+        nms=nm.split("/")
+        roots.add(nms[0])
+        for i in range(1,len(nms)):
+            a='/'.join(nms[:i])
+            b='/'.join(nms[:i+1])
+            HG_down[a].add(b)
+
+    grph=pygraphviz.AGraph(directed=True)
+
+    def addleaf(subg,nm):
+        # print(nm)
+        if nm in lk:
+            attrs=gd.node[lk[nm]].attr
+            if 'value' in attrs:
+                val=attrs['value']
+                if hasattr(val,'tensor'):
+                    shp=[str(x).strip() for x in val.tensor.tensor_shape.dim]
+                    labloo=','.join([str(x) for x in list(val.tensor.int_val)+list(val.tensor.double_val)])
+                    if labloo=='':
+                        labloo=f'[constant {str(shp)}]'
+                    subg.add_node(nm,label=labloo)
+                else:
+                    subg.add_node(nm,label=str(val))
+            else:
+                subg.add_node(nm,label=nm.split('/')[-1])
+        else:
+            subg.add_node(nm,label=nm.split('/')[-1])
+
+    def crawl(grph,nm,depth):
+        if nm in HG_down: # it has descendants!
+            subg=grph.add_subgraph(
+                name='cluster_'+nm,
+                label=nm.split('/')[-1],
+                style='filled',
+                fillcolor="#ccccccbb"
+            )
+            for subn in HG_down[nm]:
+                crawl(subg,subn,depth+1)
+
+            if nm in leaves:
+                addleaf(subg,nm)
+        else: # it has no descendents!
+            if nm in leaves:
+                addleaf(grph,nm)
+
+
+    for r in roots:
+        crawl(grph,r,0)
+
+    for nd in gd.node:
+        for inp in nd.input:
+            a=inp.split(":")[0]
+            b=nd.name
+            if a in cdn_lookups:
+                a=cdn_lookups[a]
+            if b in cdn_lookups:
+                b=cdn_lookups[b]
+            grph.add_edge(a,b)
+
+    return grph

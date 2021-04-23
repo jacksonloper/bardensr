@@ -32,6 +32,7 @@ def construct_1dslice(shp,st,sz,axis):
 
     return stv,szv
 
+
 def hermite_interpolation(val1,deriv1,val2,deriv2,t):
     '''
     Input
@@ -42,6 +43,11 @@ def hermite_interpolation(val1,deriv1,val2,deriv2,t):
     - t
 
     All shapes must be broadcastable to each other.
+
+    val1,deriv1,val2,deriv2 must be same dtype,
+    and output will have this dtype.
+
+    t can (and perhaps should) have higher precision.
 
     Output: hermite cubic interpolation on the unit
     interval.  That is, we imagine
@@ -54,16 +60,22 @@ def hermite_interpolation(val1,deriv1,val2,deriv2,t):
     and we are trying to get a reasonable value for f(t)
     '''
 
-    t2 = t**2
-    t3 = t2*t
+    with tf.name_scope('hermite_interpolation'):
+        t2 = t**2
+        t3 = t2*t
 
-    h00 = 2*t3 - 3*t2+1
-    h10 = t3 - 2*t2 + t
-    h01 = -2*t3 + 3*t2
-    h11 = t3 - t2
+        h00 = 2*t3 - 3*t2+1
+        h10 = t3 - 2*t2 + t
+        h01 = -2*t3 + 3*t2
+        h11 = t3 - t2
 
-    return h00*val1 + h10*deriv1 + h01*val2 + h11*deriv2
+        # h00*val1 + h10*deriv1 + h01*val2 + h11*deriv2
+        msm=mixed_precision_multo
+        return msm(h00,val1) + msm(h10,deriv1) + msm(h01,val2) + msm(h11,deriv2)
 
+
+def mixed_precision_multo(a,b):
+    return tf.cast(a,dtype=b.dtype)*b
 
 def linear_interpolation(val1,val2,t):
     '''
@@ -82,9 +94,11 @@ def linear_interpolation(val1,val2,t):
 
     and we are trying to get a reasonable value for f(t)
     '''
+    with tf.name_scope("linear_interpolation"):
+        msm=mixed_precision_multo
 
-    return val1*(1-t) + val2*t
-
+        # val1*(1-t) + val2*t
+        return msm(1-t,val1) + msm(t,val2)
 
 
 def floating_slices(X,t,sz,interpolation_method,cval=0):
@@ -103,11 +117,10 @@ def floating_slices(X,t,sz,interpolation_method,cval=0):
     * Y -- K x [[sz]]
 
     '''
-    sz=tf.convert_to_tensor(sz)
     newXs = [floating_slice(X[f],t[f],sz,interpolation_method,cval) for f in range(X.shape[0])]
     return tf.stack(newXs,axis=0)
 
-def floating_slice(X,t,sz,interpolation_method,cval=0):
+def floating_slice(X,t,sz,interpolation_method,constant_values=0,name=None):
     '''
     This function interpolates a slice of X
     at floating-point locations.  That is,
@@ -127,97 +140,126 @@ def floating_slice(X,t,sz,interpolation_method,cval=0):
     * X -- M0 x M1 x M2 ... x Mn
     * t -- n floating point
     * sz -- n integer
+    * method -- 'hermite' or 'linear' or 'nearest'
+    * cval -- scalar, what to do for oob indexes
 
     Out:
     * Y -- sz
 
     '''
-    X=tf.convert_to_tensor(X)
-    t=tf.cast(tf.convert_to_tensor(t),dtype=X.dtype)
-    sz=tf.convert_to_tensor(sz)
 
-    assert X.dtype==tf.float32 or X.dtype==tf.float64
-    assert t.dtype==X.dtype
-    assert sz.dtype==tf.int32 or sz.dtype==tf.int64
 
-    p=t%1
+    if name is None:
+        name='floating_slice'
+    with tf.name_scope(name):
 
-    # perform bitty bit
-    Y=X
-    for d in range(t.shape[0]):
-        if interpolation_method=='hermite': # Y=X[1+p:-2+p]
-            Y = hermite_small_translation_1d(Y,d,p[d])
-        elif interpolation_method=='linear': # Y=X[p:-1+p]
-            Y = linear_small_translation_1d(Y,d,p[d])
-        else:
-            raise NotImplementedError()
+        with tf.name_scope("casting"):
+            tic=tf.cast(t,dtype=tf.int32)
+            sz=tf.cast(sz,dtype=tf.int32)
 
-    # how different is Y from the slice we want?
-    ic=tf.cast(tf.math.floor(t),tf.int32)
-    if interpolation_method=='hermite':
-        left_wrong   = ic-1
-        right_wrong  = sz+ic-1-tf.shape(Y)
-    elif interpolation_method=='linear':
-        left_wrong   = ic
-        right_wrong  = sz+ic-tf.shape(Y)
+        '''
+        STEP 1.  Big slices.
+        - Where t is greater than 2, we can slice into it without
+            losing any information for any interpolation we might want
+        - Where t+sz is less than shape-2, we can slice into it
+            without losing any information for any interpolation we might want
+        '''
+
+        with tf.name_scope("bigslices"):
+
+            shp=tf.shape(X)
+            left_slicein=tf.clip_by_value(tic-2,0,shp-2)
+            right_doable_size=tf.clip_by_value(left_slicein+sz+2,0,shp-left_slicein) # left_slicein+doable_sz <=shp
+
+            X=tf.slice(X,left_slicein,right_doable_size)
+            t=t-tf.cast(left_slicein,t.dtype)
+
+        '''
+        STEP 2.  Bitty bits.
+        '''
+
+        p=t%1
+        for d in range(t.shape[0]):
+            if interpolation_method=='hermite': # Y=X[p-1:shp+p]
+                X = hermite_small_translation_1d_padded(X,d,p[d])
+            elif interpolation_method=='linear': # Y=X[p-1:shp+p]
+                X = linear_small_translation_1d_padded(X,d,p[d])
+            elif interpolation_method=='nearest': # Y=X
+                pass
+            else:
+                raise NotImplementedError()
+
+        '''
+        STEP 3.  Final pad and slice.
+        '''
+
+        with tf.name_scope("finalpadnslice"):
+            if interpolation_method=='hermite' or interpolation_method=='linear':
+                ic=tf.cast(tf.math.floor(t),tf.int32)
+                # current left edge of X is located at p-1
+                # we want the current left edge of X to be at t=ic+p
+                left_wrong = ic+1  # (ic+p) - (p-1)
+
+                # current right edge of X is located at shp+p
+                # we want it to be at 1+t+sz=1+ic+p+sz
+                right_wrong = 1+sz+ic-tf.shape(X) # (ic+p+sz) - (shp+p)
+            elif interpolation_method=='nearest':
+                ic=tf.cast(tf.math.round(t),tf.int32)
+                left_wrong   = ic
+                right_wrong  = sz+ic-tf.shape(X)
+            else:
+                raise NotImplementedError()
+
+            # get pad and slice necessary to make Y what we want
+            pad_left   = tf.clip_by_value(-left_wrong,0,left_wrong.dtype.max)
+            slice_left = tf.clip_by_value(left_wrong,0,left_wrong.dtype.max)
+            pad_right  = tf.clip_by_value(right_wrong,0,left_wrong.dtype.max)
+
+            # do it!
+            Y=tf.pad(X,tf.stack([pad_left,pad_right],axis=-1))
+            Z=tf.slice(Y,slice_left,sz)
+
+            return Z
+
+def sample(X,points,interpolation_method='nearest',constant_values=0.0):
+    '''
+    Input
+    * X      -- M0 x M1 x M2 ... M(n-1)
+    * points -- K x n
+    * interpolation_method (only 'nearest' implemented at this time)
+
+    Output
+    * Y -- K
+
+    Such that, roughly speaking Y[k]= X[points[k]]
+
+    When interpolation_method is 'nearest', this is a thin
+    wrapper around gather which ensures that any attempts to
+    access indices which are oob for X yield 0.0.
+    '''
+
+    n=len(X.shape)
+    K=len(points)
+
+    if interpolation_method=='nearest':
+        points=tf.cast(tf.round(points),tf.int32)
+
+        # get good points
+        zero=tf.zeros(n,dtype=tf.int32)
+        sz=tf.convert_to_tensor(X.shape,dtype=tf.int32)
+        good=tf.reduce_all((points>=zero)&(points<sz),axis=-1)
+
+        # do the gather on the good points
+        gathered=tf.gather_nd(X,tf.boolean_mask(points,good))
+
+        # scatter the good values out to the right places
+        default=tf.fill((K,),tf.cast(constant_values,dtype=X.dtype))
+        return tf.tensor_scatter_nd_update(
+            default,tf.where(good),gathered,(points.shape[0],))
     else:
         raise NotImplementedError()
 
-    # get pad and slice necessary to make Y what we want
-    pad_left   = tf.clip_by_value(-left_wrong,0,left_wrong.dtype.max)
-    slice_left = tf.clip_by_value(left_wrong,0,left_wrong.dtype.max)
-    pad_right  = tf.clip_by_value(right_wrong,0,left_wrong.dtype.max)
-
-    # do it!
-    Z=tf.pad(Y,tf.stack([pad_left,pad_right],axis=-1))
-    Z=tf.slice(Z,slice_left,sz)
-
-    return Z
-
-def hermite_samples_1d(X,axis,ts):
-    '''
-    Samples X along axis.  Intuitively, something like
-
-        result[...,i...,] approx X[...,ts[i],...]
-
-    where t[i] may be floating point.  The shape
-    of result will be same as the shape of X,
-    except along axis, where it will have same dimension as ts
-
-    The user must guarantee that 1 <= floor(ts[i]) < X.shape[i]-2
-
-    Input:
-    - X: M0 x M1 x M2 ... Mn
-    - axis: scalar
-    - ts: K
-
-    Output:
-    - Y: M0 x M1 x ... M(axis-1) x K x M(axis+1) x ... Mn
-    '''
-    shp=tf.shape(X)
-    tshp=tf.shape(ts)
-
-    # get the four neighbors. these are of shape M0 x ... K ... Mn
-    integer_component=tf.cast(tf.math.floor(ts),tf.int32)
-    W2 = tf.gather(X,integer_component-1,axis=axis) #
-    W1 = tf.gather(X,integer_component,axis=axis)
-    E1 = tf.gather(X,integer_component+1,axis=axis)
-    E2 = tf.gather(X,integer_component+2,axis=axis)
-
-    # estimate derivatives at W1 and E1
-    W1_deriv = (E1-W2)/2.0
-    E1_deriv = (E2-W1)/2.0
-
-    # broadcast ts correctly
-    n=shp.shape[0] #
-    newshape=tf.ones(n,dtype=tf.int32)
-    newshape=tf.tensor_scatter_nd_update(newshape,[[axis]],tshp)
-    props_broadcastable = tf.reshape(ts%1,newshape)
-
-    # hermite interpolation does the rest
-    return hermite_interpolation(W1,W1_deriv,E1,E1_deriv,props_broadcastable)
-
-def hermite_small_translation_1d(X,axis,t):
+def hermite_small_translation_1d(X,axis,t,name=None):
     '''
     Translates X along axis by an amount 0<=t<=1.  Intuitively, something like
 
@@ -226,51 +268,197 @@ def hermite_small_translation_1d(X,axis,t):
     where t is floating point  The shape
     of result will be same as the shape of X,
     except along axis, where it will be reduced by three.
+
+
+    0 A B C D 0
+
     '''
-    shp=tf.shape(X)
 
-    # get four neighbors
-    stv,szv=construct_1dslice(shp,0,shp[axis]-3,axis)
-    W2 = tf.slice(X,stv,szv)
+    if name is None:
+        name='hermite_small_translation_1d'
+    with tf.name_scope(name):
 
-    stv=tf.tensor_scatter_nd_add(stv,[[axis]],[1])
-    W1 = tf.slice(X,stv,szv)
+        shp=tf.shape(X)
 
-    stv=tf.tensor_scatter_nd_add(stv,[[axis]],[1])
-    E1 = tf.slice(X,stv,szv)
+        # get four neighbors
+        stv,szv=construct_1dslice(shp,0,shp[axis]-3,axis)
+        W2 = tf.slice(X,stv,szv)
 
-    stv=tf.tensor_scatter_nd_add(stv,[[axis]],[1])
-    E2 = tf.slice(X,stv,szv)
+        stv=tf.tensor_scatter_nd_add(stv,[[axis]],[1])
+        W1 = tf.slice(X,stv,szv)
 
-    # estimate derivatives at W1 and E1
-    W1_deriv = (E1-W2)/2.0
-    E1_deriv = (E2-W1)/2.0
+        stv=tf.tensor_scatter_nd_add(stv,[[axis]],[1])
+        E1 = tf.slice(X,stv,szv)
 
-    # hermite interpolation does the rest
-    return hermite_interpolation(W1,W1_deriv,E1,E1_deriv,t)
+        stv=tf.tensor_scatter_nd_add(stv,[[axis]],[1])
+        E2 = tf.slice(X,stv,szv)
+
+        # estimate derivatives at W1 and E1
+        W1_deriv = (E1-W2)/2.0
+        E1_deriv = (E2-W1)/2.0
+
+        # hermite interpolation does the rest
+        return hermite_interpolation(W1,W1_deriv,E1,E1_deriv,t)
+
+def hermite_small_translation_1d_padded(X,axis,t,constant_values=0.0,name=None):
+    '''
+    Translates X along axis by an amount 0<=t<=1.  Intuitively, something like
+
+        result[...,i...,] approx X[...,i+t-1,...]
+
+    where t is floating point.  The shape
+    of result will be same as the shape of X,
+    except along axis, where it will be increased by 1.
 
 
-def linear_small_translation_1d(X,axis,t):
+        q   A   B   C   D   E   q         t=.2
+     q   A'  B'  C'  D'  E'  F'   q
+        |   |   |   |   |   |   |
+        A*  B*  C*  D*  E*  F*  G*
+
+    We need to compute values and derivatives
+    for A*,B*,C*,D*...
+
+    - f(A*) = q, f'(A*)=0    <-- early cases
+    - f(B*) = A, f'(B*)=(B-A)
+
+    - f(C*) = B, f'(C*)=(C-A)/2   <-- this is the general case
+    - f(D*) = C, f'(D*)=(E-C)/2
+
+    - f(F*) = E, f'(F*) = (E-D)
+    - f(G*) = q, f'(G*) = 0 <-- final cases
+
+    '''
+
+    if name is None:
+        name='hermite_small_translation_1d_padded'
+
+    with tf.name_scope(name):
+
+        shp=tf.shape(X)
+        n=tf.shape(shp)[0]
+
+        ############
+        # get allvals
+        with tf.name_scope("allvals"):
+            pad=tf.ones(2,dtype=tf.int32)[None,:]*tf.one_hot(axis,n,dtype=tf.int32)[:,None]
+            allvals=tf.pad(X,pad,constant_values=constant_values)
+
+        ###################
+        # get allderivs
+
+        with tf.name_scope("allderivs"):
+
+            with tf.name_scope('secants'):
+                # in the middle, we can get secant derivatives
+                stv,szv=construct_1dslice(shp,0,shp[axis]-2,axis)
+                W = tf.slice(X,stv,szv)
+                stv=tf.tensor_scatter_nd_add(stv,[[axis]],[2])
+                E = tf.slice(X,stv,szv)
+                mid_derivs=(E-W)*.5
+
+            with tf.name_scope("penultimates"):
+                # on the penultimate cases, we can get one-way derivs
+                W1=tf.gather(X,[0],axis=axis)
+                W2=tf.gather(X,[1],axis=axis)
+                west_deriv=W2-W1
+
+                E1=tf.gather(X,[shp[axis]-2],axis=axis)
+                E2=tf.gather(X,[shp[axis]-1],axis=axis)
+                east_deriv=E2-E1
+
+            with tf.name_scope("stackitup"):
+                # on the ultimate cases -- zero
+                zero_deriv=tf.zeros_like(east_deriv)
+
+                # concat!
+                allderivs=tf.concat(
+                    [zero_deriv,west_deriv,mid_derivs,east_deriv,zero_deriv],axis=axis)
+
+
+
+        ##############
+        # do interpolation
+        with tf.name_scope("sliceandinterpolate"):
+            stv,szv=construct_1dslice(shp,0,shp[axis]+1,axis)
+            W = tf.slice(allvals,stv,szv)
+            Wd = tf.slice(allderivs,stv,szv)
+            stv=tf.tensor_scatter_nd_add(stv,[[axis]],[1])
+            E = tf.slice(allvals,stv,szv)
+            Ed = tf.slice(allderivs,stv,szv)
+
+            # hermite interpolation does the rest
+            return hermite_interpolation(W,Wd,E,Ed,t)
+
+def linear_small_translation_1d(X,axis,t,name=None):
     '''
     Translates X along axis by an amount 0<=t<=1.  Intuitively, something like
 
         result[...,i...,] approx X[...,i+t,...]
 
-    where t is floating point  The shape
+    where t is floating point.  The shape
     of result will be same as the shape of X,
-    except along axis, where it will be reduced by 1.
+    except along axis, where it will reduced by 1.
     '''
-    shp=tf.shape(X)
 
-    # get two neighbors
-    stv,szv=construct_1dslice(shp,0,shp[axis]-1,axis)
-    W = tf.slice(X,stv,szv)
+    if name is None:
+        name='linear_small_translation_1d'
 
-    stv=tf.tensor_scatter_nd_add(stv,[[axis]],[1])
-    E = tf.slice(X,stv,szv)
+    with tf.name_scope(name):
 
-    # linear interpolation does the rest
-    return linear_interpolation(W,E,t)
+        shp=tf.shape(X)
+
+        # get two neighbors
+        stv,szv=construct_1dslice(shp,0,shp[axis]-1,axis)
+        W = tf.slice(X,stv,szv)
+
+        stv=tf.tensor_scatter_nd_add(stv,[[axis]],[1])
+        E = tf.slice(X,stv,szv)
+
+        # linear interpolation does the rest
+        return linear_interpolation(W,E,t)
+
+
+def linear_small_translation_1d_padded(X,axis,t,constant_values=0.0,name=None):
+    '''
+    Translates X along axis by an amount 0<=t<=1.  Intuitively, something like
+
+        result[...,i...,] approx X[...,i+t,...]
+
+    where t is floating point.  The shape
+    of result will be same as the shape of X,
+    except along axis, where it will be increased by 1.
+
+
+        q   A   B   C   D   E   q         t=.2
+     q   A'  B'  C'  D'  E'  F'   q
+        |   |   |   |   |   |   |
+        A*  B*  C*  D*  E*  F*  G*
+
+
+    '''
+
+    if name is None:
+        name='linear_small_translation_1d_padded'
+
+    with tf.name_scope(name):
+
+        shp=tf.shape(X)
+        n=tf.shape(shp)[0]
+
+        # pad
+        pad=tf.ones(2,dtype=tf.int32)[None,:]*tf.one_hot(axis,n,dtype=tf.int32)[:,None]
+        allvals=tf.pad(X,pad,constant_values=constant_values)
+
+        # get two neighbors
+        stv,szv=construct_1dslice(shp,0,shp[axis]+1,axis)
+        W = tf.slice(allvals,stv,szv)
+
+        stv=tf.tensor_scatter_nd_add(stv,[[axis]],[1])
+        E = tf.slice(allvals,stv,szv)
+
+        # linear interpolation does the rest
+        return linear_interpolation(W,E,t)
 
 ###################
 # blur kernels
@@ -295,7 +483,6 @@ def heat_kernel_nd(X,niters):
     return X
 
 
-@tf.function(autograph=False)
 def gaussian_filter_3d(X,sigmas):
     '''
     X -- ... x M0 x M1 x M2
@@ -310,7 +497,6 @@ def gaussian_filter_3d(X,sigmas):
     return X
 
 
-@tf.function(autograph=False)
 def gaussian_filter_2d(X,sigmas):
     '''
     X -- ... x M0 x M1
@@ -324,6 +510,13 @@ def gaussian_filter_2d(X,sigmas):
     return X
 
 def gaussian_filter_1d(X,sigma,axis):
+    return tf.cond(
+        sigma==0,
+        lambda: X,
+        lambda: _gaussian_filter_1d(X,sigma,axis),
+    )
+
+def _gaussian_filter_1d(X,sigma,axis):
     '''
     X -- tensor
     sigma -- scalar
@@ -331,24 +524,27 @@ def gaussian_filter_1d(X,sigma,axis):
 
     filters X over axis
     '''
-    xs=tf.cast(tf.range(-sigma*3+1,sigma*3+2),dtype=X.dtype)
+    # construct filter (in float64 land)
+    xs = tf.range(1,sigma*3+1,dtype=tf.float64)
+    zero= tf.cast(0,dtype=tf.float64)[None]
+    xs = tf.concat([-tf.reverse(xs,(0,)),zero,xs],axis=0)
+
     filt=tf.math.exp(-.5*xs**2/(sigma*sigma))
     filt=filt/tf.reduce_sum(filt)
     filt=filt[:,None,None] # width x 1 x 1
 
-    # now we got to transpose X annoyingly
+    # cast filter to X dtype
+    filt=tf.cast(filt,dtype=X.dtype)
 
+    # transpose X so that the spatial dimension is at the end
     axes=list(range(len(X.shape)))
     axes[-1],axes[axis]=axes[axis],axes[-1]
-
     X_transposed=tf.transpose(X,axes) # everythingelse x axis x 1
 
-    newshp=(np.prod(X_transposed.shape[:-1]),X_transposed.shape[-1],1)
-    X_transposed_reshaped=tf.reshape(X_transposed,newshp)
+    # do convolution
+    X_convolved_transposed=tf.nn.conv1d(X_transposed[None,...,None],filt,1,'SAME')[0,...,0]
 
-    X_convolved=tf.nn.conv1d(X_transposed_reshaped,filt,1,'SAME')
-    X_convolved_reshaped=tf.reshape(X_convolved,X_transposed.shape)
+    # transpose back
+    X_convolved=tf.transpose(X_convolved_transposed,axes)
 
-    X_convolved_reshaped_transposed=tf.transpose(X_convolved_reshaped,axes)
-
-    return X_convolved_reshaped_transposed
+    return X_convolved
