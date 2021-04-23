@@ -1,4 +1,4 @@
-from .. import kernels
+from . import translations_tf
 import tensorflow as tf
 
 def _calc_loss(X,code,t,sz):
@@ -6,7 +6,7 @@ def _calc_loss(X,code,t,sz):
     Proportion of the variance unexplained by using
     a single code to explain each pixel.
     '''
-    newX = kernels.floating_slices(X,t,sz,'hermite')
+    newX = translations_tf.floating_slices(X,t,sz,'hermite')
     dots=tf.einsum('fj,f...->...j',code,newX)
 
     mx = tf.reduce_max(dots,axis=-1)
@@ -21,7 +21,7 @@ def _calc_scaled_loss(X,code,t,sz):
     Proportion of the variance unexplained by using
     a single code to explain each pixel.
     '''
-    newX = kernels.floating_slices(X,t,sz,'hermite')
+    newX = translations_tf.floating_slices(X,t,sz,'hermite')
     dots=tf.einsum('fj,f...->...j',code,newX)
 
     mx = tf.reduce_max(dots,axis=-1)

@@ -1,7 +1,7 @@
-from .. import kernels
+from . import translations_tf
 import tensorflow as tf
 from .. import misc
-from .. import tiling
+from ..rectangles import tiling
 import scipy as sp
 import scipy.ndimage
 import numpy as np
@@ -207,7 +207,7 @@ def apply_small_affine_registration(X,affine,sz=None,constant_values=0,
         # so now Y[f][tile.look][0,0,0]... = X[f][translation_at_start]
         # stick it in
         targets.append(tile.look.as_slices)
-        values.append(kernels.floating_slice(
+        values.append(translations_tf.floating_slice(
             X,
             translation_at_start,
             tf.cast(tile.look.size,tf.int32),
@@ -263,7 +263,7 @@ def apply_large_affine_registration(X,affines,sz,mode='valid',constant_values=0,
 
     # sample
     meshgrid = np.reshape(meshgrid,(-1,n))
-    Y=kernels.sample(X,meshgrid,
+    Y=translations_tf.sample(X,meshgrid,
         interpolation_method=interpolation_method,constant_values=constant_values).numpy()
     Y=np.reshape(Y,sz)
     return Y
@@ -290,7 +290,7 @@ def apply_translation_registration(mini,totalt,mode='valid',interpolation_method
             totalt,interpolation_method)
     else:
         raise NotImplementedError(mode)
-    minir=kernels.floating_slices(mini,
+    minir=translations_tf.floating_slices(mini,
             newt,sz,interpolation_method)
     return minir.numpy(),newt.numpy()
 

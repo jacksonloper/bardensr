@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from .. import misc
-from .. import kernels
+from . import translations_tf
 from . import lowrankregistration_tf
 import numbers
 import scipy as sp

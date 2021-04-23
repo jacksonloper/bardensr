@@ -1,12 +1,10 @@
 import numpy as np
 import scipy as sp
 import itertools
-from . import rectangles
+from .rectangle import Rectangle
 import dataclasses
 
 import collections
-
-Tile=collections.namedtuple('Tile',['look','grab','put'])
 
 def prod(lst,start):
     a=start
@@ -16,9 +14,9 @@ def prod(lst,start):
 
 @dataclasses.dataclass
 class LookGrabPut:
-    look: rectangles.Rectangle
-    grab: rectangles.Rectangle
-    put: rectangles.Rectangle
+    look: Rectangle
+    grab: Rectangle
+    put: Rectangle
 
     def __mul__(self,other):
         if other is None:
@@ -46,7 +44,7 @@ def tile_up_simple(start,stop,sz):
     bins=np.r_[start:stop:sz]
     assert len(bins)>0
 
-    return [rectangles.Rectangle([bins[i]],[bins[i+1]]) for i in range(len(bins)-1)]
+    return [Rectangle([bins[i]],[bins[i+1]]) for i in range(len(bins)-1)]
 
 def tile_up_simple_nd(starts,stops,szs):
     ls=[tile_up_simple(l,s,b) for (l,s,b) in zip(starts,stops,szs)]
@@ -152,9 +150,9 @@ def tile_up(length,inner_sz,border_sz,last_edge_behavior='short'):
     rez=[]
     for ((l0,l1),(g0,g1),(p0,p1)) in zip(lookblocks,grabblocks,putblocks):
         rez.append(LookGrabPut(
-            rectangles.Rectangle([l0],[l1]),
-            rectangles.Rectangle([g0],[g1]),
-            rectangles.Rectangle([p0],[p1]),
+            Rectangle([l0],[l1]),
+            Rectangle([g0],[g1]),
+            Rectangle([p0],[p1]),
         ))
     return rez
 
@@ -262,9 +260,9 @@ def tile_up_noborder(length,inner_sz,border_sz,last_edge_behavior='short'):
     rez=[]
     for ((l0,l1),(g0,g1),(p0,p1)) in zip(lookblocks,grabblocks,putblocks):
         rez.append(LookGrabPut(
-            rectangles.Rectangle([l0],[l1]),
-            rectangles.Rectangle([g0],[g1]),
-            rectangles.Rectangle([p0],[p1]),
+            Rectangle([l0],[l1]),
+            Rectangle([g0],[g1]),
+            Rectangle([p0],[p1]),
         ))
     return rez
 

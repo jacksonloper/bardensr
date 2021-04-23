@@ -1,6 +1,16 @@
 import tensorflow as tf
 import numpy as np
 
+'''
+ _     _
+| |__ | |_   _ _ __
+| '_ \| | | | | '__|
+| |_) | | |_| | |
+|_.__/|_|\__,_|_|
+
+'''
+
+
 def gaussian_filter_3d(X,sigmas):
     '''
     X -- ... x M0 x M1 x M2
@@ -66,3 +76,47 @@ def _gaussian_filter_1d(X,sigma,axis):
     X_convolved=tf.transpose(X_convolved_transposed,axes)
 
     return X_convolved
+
+'''
+     _
+ ___| |__   __ _ _ __ _ __   ___ _ __
+/ __| '_ \ / _` | '__| '_ \ / _ \ '_ \
+\__ \ | | | (_| | |  | |_) |  __/ | | |
+|___/_| |_|\__,_|_|  | .__/ \___|_| |_|
+                     |_|
+'''
+
+def gaussian_sharpen_3d(X,sigmas,sharpening_levels):
+    '''
+    X -- ... x M0 x M1 x M2
+    sigma -- tuple of length 3
+    '''
+
+    nd=len(X.shape)
+    X=gaussian_sharpen_1d(X,sigmas[0],sharpening_levels[0],nd-3)
+    X=gaussian_sharpen_1d(X,sigmas[1],sharpening_levels[1],nd-2)
+    X=gaussian_sharpen_1d(X,sigmas[2],sharpening_levels[2],nd-1)
+
+    return X
+
+
+def gaussian_sharpen_2d(X,sigmas,sharpening_levels):
+    '''
+    X -- ... x M0 x M1
+    sigma -- tuple of length 2
+    '''
+
+    nd=len(X.shape)
+    X=gaussian_sharpen_1d(X,sigmas[0],sharpening_levels[0],nd-2)
+    X=gaussian_sharpen_1d(X,sigmas[1],sharpening_levels[1],nd-1)
+
+    return X
+
+def gaussian_sharpen_1d(X,sigma,sharpening_level,axis):
+    blurred= tf.cond(
+        sigma==0,
+        lambda: X,
+        lambda: _gaussian_filter_1d(X,sigma,axis),
+    )
+
+    return X+ sharpening_level*(X-blurred)

@@ -1,8 +1,8 @@
 import matplotlib.pylab as plt
 import numpy as np
-from . import rectangles
+from .. import rectangles
 import io
-from . import misc
+from .. import misc
 import subprocess
 from contextlib import contextmanager
 import IPython.display
