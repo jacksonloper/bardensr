@@ -10,10 +10,42 @@ import bardensr.misc
 import tqdm.notebook
 from .. import misc
 import numpy.random as npr
-
-
 import scipy.spatial
 
+def calc_circum(V):
+    '''
+    input
+    * V -- (batch x (d+1) x d) -- a simplex
+
+    Output
+    * circumcenters -- (batch,d)
+    * circumradii -- (batch)
+    '''
+
+    '''
+    Let
+
+        diff = V[i,j1] - V[i,j2]
+        diff = diff/np.linalg.norm(diff)
+
+    Then circumcenter[i] must satisfy
+
+        np.sum(circumcenter[i]*diff) == .5*np.sum(diff*(V[i,j1]+V[i,j2]))
+
+    This forms a system we can work with to compute circumcenters
+    and circumradii.
+    '''
+
+    directions = V[:,[0]] - V[:,1:]  # batch x d x d
+    avgs = .5*(V[:,[0]] + V[:,1:]) # batch x d x d
+    directions = directions / np.linalg.norm(directions,keepdims=True,axis=-1) # batch x d x d
+
+    beta = np.sum(avgs*directions,axis=-1)
+
+    circumcenters = np.linalg.solve(directions,beta) # batch x d
+    circumradii = np.linalg.norm(circumcenters - V[:,0],axis=-1)
+
+    return circumcenters,circumradii
 
 def alpha_3d_shape(pointcloud,circumradius,perturbfactor=1e-10):
     perturb=np.ptp(pointcloud)*perturbfactor
@@ -22,7 +54,7 @@ def alpha_3d_shape(pointcloud,circumradius,perturbfactor=1e-10):
     dl = sp.spatial.Delaunay(pointcloud)
     s=dl.simplices
     s=pointcloud[s]
-    circumcenters,sizes=misc.calc_circum(s)
+    circumcenters,sizes=calc_circum(s)
 
     # find out which simplices are good
     good = sizes < circumradius

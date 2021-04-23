@@ -27,40 +27,6 @@ def tf_model_from_wire(s):
 
     return model
 
-def calc_circum(V):
-    '''
-    input
-    * V -- (batch x (d+1) x d) -- a simplex
-
-    Output
-    * circumcenters -- (batch,d)
-    * circumradii -- (batch)
-    '''
-
-    '''
-    Let
-
-        diff = V[i,j1] - V[i,j2]
-        diff = diff/np.linalg.norm(diff)
-
-    Then circumcenter[i] must satisfy
-
-        np.sum(circumcenter[i]*diff) == .5*np.sum(diff*(V[i,j1]+V[i,j2]))
-
-    This forms a system we can work with to compute circumcenters
-    and circumradii.
-    '''
-
-    directions = V[:,[0]] - V[:,1:]  # batch x d x d
-    avgs = .5*(V[:,[0]] + V[:,1:]) # batch x d x d
-    directions = directions / np.linalg.norm(directions,keepdims=True,axis=-1) # batch x d x d
-
-    beta = np.sum(avgs*directions,axis=-1)
-
-    circumcenters = np.linalg.solve(directions,beta) # batch x d
-    circumradii = np.linalg.norm(circumcenters - V[:,0],axis=-1)
-
-    return circumcenters,circumradii
 
 
 def nan_robust_hamming(A,B):

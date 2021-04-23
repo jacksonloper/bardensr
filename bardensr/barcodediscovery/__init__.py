@@ -104,6 +104,8 @@ def blurry_3d_nmf_lossfunc(data, G, F,blur):
     data -- (...,N,M0,M1,M2)
     G -- (...,N)
     F -- (...,M0,M1,M2)
+
+    try to match data with rank-1 model
     '''
     from .. import kernels
     import tensorflow as tf
