@@ -4,7 +4,7 @@ Adapted from scipy implementation of revised simplex method
 
 import tensorflow as tf
 import numpy as np
-from . import misc
+from .. import misc
 
 
 def tal(params,indices,axis=1):

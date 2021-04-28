@@ -38,8 +38,9 @@ def gaussian_filter_2d(X,sigmas):
     return X
 
 def gaussian_filter_1d(X,sigma,axis):
+    sigma=tf.cast(sigma,dtype=tf.float64)
     return tf.cond(
-        sigma==0,
+        sigma==tf.cast(0,tf.float64),
         lambda: X,
         lambda: _gaussian_filter_1d(X,sigma,axis),
     )

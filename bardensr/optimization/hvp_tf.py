@@ -1,6 +1,7 @@
 import tensorflow as tf
 import contextlib
 import collections
+from . import cg_tf
 
 @contextlib.contextmanager
 def HessianVectorProduct(towatch,search_direction):
@@ -80,13 +81,16 @@ class _HVP:
 
 
 def contain_bad_searchdir(val,sd,lo=None,hi=None):
+    if (lo is None) and (hi is None):
+        return sd
+
     bad=False
     if lo is not None:
         bad = bad | ((sd<0)&(val<=lo)) # searchdir says go down, but val says no!
     if hi is not None:
         bad = bad | ((sd>0)&(val>=hi)) # searchdir says go up, but val says no!
 
-    # zero out the badness
+    # zero out the badness)
     zero=tf.cast(0,sd.dtype)
     search_direction = tf.where(bad,zero,sd)
 
@@ -106,6 +110,87 @@ ArmijoLinesearchPrep=collections.namedtuple('ArmijoLinesearchPrep',
         'lo_tf',
         'hi_tf',
     ])
+
+def inexact_newton_solve(lossfunc,initial_guess,maxiter=10):
+
+    with tf.GradientTape() as t:
+        t.watch(initial_guess)
+        loss=lossfunc(initial_guess)
+    grad=t.gradient(loss,initial_guess)
+    naive_search_direction=-grad
+
+    def operator(search_direction):
+        with HessianVectorProduct(initial_guess,search_direction) as h:
+            loss = lossfunc(initial_guess)
+            h.process(loss)
+        return h.hess_vector_product_in_search_direction
+
+    cgs=cg_tf.cg(
+        operator,
+        naive_search_direction,
+        maxiter,
+        x0=naive_search_direction,
+    ) # solve Hx = -grad
+
+    new_search_direction=cgs.x
+
+    dot=-tf.reduce_sum(new_search_direction*grad)
+    tf.debugging.assert_non_negative(dot,summarize=1,
+                message="inexact newton solve failed to find a valid searchdir")
+
+    return new_search_direction
+
+def inexact_newton_solve_with_bounds(lossfunc,initial_guess,maxiter=10,lo=None,hi=None):
+
+    with tf.GradientTape() as t:
+        t.watch(initial_guess)
+        loss=lossfunc(initial_guess)
+    grad=t.gradient(loss,initial_guess)
+    sd=-grad
+
+    # get the bad places
+    bad=False
+    if lo is not None:
+        bad = bad | ((sd<0)&(initial_guess<=lo)) # searchdir says go down, but val says no!
+    if hi is not None:
+        bad = bad | ((sd>0)&(initial_guess>=hi)) # searchdir says go up, but val says no!
+
+    # get a reasonable search direction
+    zero=tf.cast(0,sd.dtype)
+    naive_search_direction = tf.where(bad,zero,sd)
+
+    def operator(search_direction):
+        # kill the search direction in bad places
+        search_direction_killed = tf.where(bad,zero,search_direction)
+
+        # get hvp in killed direction
+        with HessianVectorProduct(initial_guess,search_direction_killed) as h:
+            loss = lossfunc(initial_guess)
+            h.process(loss)
+        hvp=h.hess_vector_product_in_search_direction
+
+        # make operator behave as if the killed directions just stayed put
+        return tf.where(bad,search_direction,hvp)
+
+    cgs=cg_tf.cg(
+        operator,
+        naive_search_direction,
+        maxiter,
+    ) # solve Hx = -grad
+
+    new_search_direction=cgs.x
+
+    dot=-tf.reduce_sum(new_search_direction*grad)
+    tf.debugging.assert_non_negative(dot,summarize=1,
+                message="inexact newton solve failed to find a valid searchdir")
+
+    new_search_direction=contain_bad_searchdir(initial_guess,new_search_direction,lo,hi)
+    dot=-tf.reduce_sum(new_search_direction*grad)
+    tf.debugging.assert_non_negative(dot,summarize=1,
+                message="inexact newton solve failed to find a valid searchdir "
+                        "(after enforcing bounds...")
+
+    return new_search_direction
 
 def prepare_for_armijo_linesearch(lossfunc,initial_guess,
                     search_direction=None,
@@ -149,7 +234,17 @@ def prepare_for_armijo_linesearch(lossfunc,initial_guess,
         search_direction=-grad
         search_direction=contain_bad_searchdir(initial_guess,search_direction,lo,hi)
     elif enforce_bounds_sd:
-        search_direction=contain_bad_gradients(initial_guess,search_direction,lo,hi)
+        dot=tf.reduce_sum(search_direction*grad)
+        tf.debugging.assert_non_positive(dot,summarize=1,
+                message="this is a terrible search direction for minimizing lossfunc "
+                        "maybe you are trying to maximize instead of minimize?")
+
+        search_direction=contain_bad_searchdir(initial_guess,search_direction,lo,hi)
+
+        dot=tf.reduce_sum(search_direction*grad)
+        tf.debugging.assert_non_positive(dot,summarize=1,
+                message="after removing vectors pointing in the wrong direction "
+                        "this has become a terrible search direction.  pick a better one")
 
     # pick travelling distance guess
     if travelling_distance is None:
@@ -160,10 +255,6 @@ def prepare_for_armijo_linesearch(lossfunc,initial_guess,
         sd_dot_grad=h.grad_dot_search_direction
     else:
         sd_dot_grad = tf.reduce_sum(search_direction*grad)
-
-    tf.debugging.assert_non_positive(sd_dot_grad,summarize=1,
-                message="this is a terrible search direction for minimizing lossfunc"
-                        "maybe you are trying to maximize instead of minimize?")
 
     return ArmijoLinesearchPrep(
         initial_guess,
@@ -216,8 +307,6 @@ def armijo_linesearch(lossfunc,prep,armijo_c1=1e-4,decay_rate=.5,maxiter=10):
 
         # get armijo constant
         armijo = (newloss - prep.loss) / (force*prep.sd_dot_grad)
-
-        print(armijo)
 
         if armijo>armijo_c1:
             break
