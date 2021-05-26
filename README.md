@@ -79,7 +79,7 @@ with tf.device(devicename):
 
 Several options for dealing with memory limitations --
 
-1. Create minitiles from your imagestack, and process each separately.  Some examples of how this can be done are given in the [example notebook](examples/basics.ipynb).
+1. Create minitiles from your imagestack, and process each separately.  
 2. Use CPU (GPUs almost always have less RAM).
 3. Use lower precision (e.g. convert numpy array to float16)
 4. Use a bigger machine!
