@@ -153,7 +153,7 @@ Output: bumps, a pandas dataframe with the following columns
 - magnitude -- value of evidence_tensor in the middle of the bump
 ```
 
-### bardensr.registration.find_translations_lowrank(imagestack,codebook,...)
+### bardensr.registration.find_translations_using_model(imagestack,codebook,...)
 
 A method that uses the codebook and the model to find a translation of the imagestack which is more consistent with the observation model.  Before running this code, we generally advocate preprocessing by running `bardensr.preprocess_minmax`, running `bardensr.preprocess_bgsubtraction` and then running `bardensr.preprocess_minmax` again.
 
