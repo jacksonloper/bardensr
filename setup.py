@@ -14,6 +14,7 @@ setup(
         'bardensr.optimization',
         'bardensr.plotting',
         'bardensr.reconstruction',
+        'bardensr.preprocessing',
         'bardensr.rectangles',
         'bardensr.registration',
         'bardensr.spot_calling',
