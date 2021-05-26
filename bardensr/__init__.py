@@ -1,3 +1,5 @@
+from . import registration,spot_calling,preprocessing,benchmarks
+
 def ipydoc(x,saynm=True,strip4=True):
     import IPython.display
     nm=x.__name__
@@ -11,13 +13,8 @@ def ipydoc(x,saynm=True,strip4=True):
     else:
         return IPython.display.Markdown(docstr)
 
-
-
 def load_example(name='ab701a5a-2dc3-11eb-9890-0242ac110002'):
-    # load data (including the barcode table B)
     import pkg_resources
     import h5py
-    from . import benchmarks
     DATA_PATH = pkg_resources.resource_filename('bardensr.benchmarks', f'{name}.hdf5')
-
     return benchmarks.load_h5py(DATA_PATH)
