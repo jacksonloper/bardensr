@@ -12,7 +12,7 @@ import numpy.random as npr
 from . import helpers
 from . import helpers_tf
 
-from ... import blur_kernels as kernels
+from bardensr import blur_kernels
 
 import tensorflow as tf
 
@@ -38,7 +38,7 @@ class HeatKernel:
             return X
         else:
             bl=tuple([int(b) for b in self.blur_level])
-            return kernels.heat_kernel_nd(X,bl)
+            return blur_kernels.gaussian_filter_3d(X,bl)
 
 class Model:
     def __init__(self,codebook,spatial_dims,blur_level=None,F=None,a=None,b=None,alpha=None,rho=None,varphi=None,

@@ -4,7 +4,7 @@
 import numpy as np
 import scipy as sp
 import scipy.spatial.distance
-from ... import blur_kernels as kernels
+from bardensr import blur_kernels
 import numpy.random as npr
 
 def sim_onehot_code_against_unknown_codes(codes,lim=100,hamdst=3):

@@ -32,7 +32,7 @@ from . import simulation
 from . import processing
 from . import denselearner
 from . import training
-from ... import rectangles
+from bardensr.rectangles import tiling
 
 import numpy as np
 
