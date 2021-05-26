@@ -5,6 +5,7 @@ import io
 from .. import misc
 import subprocess
 from contextlib import contextmanager
+import shnauzer
 import IPython.display
 import collections
 import contextlib
