@@ -86,7 +86,7 @@ Several options for dealing with memory limitations --
 
 ## Public API
 
-### bardensr.spot_calling.build_density_singleshot(imagestack,codebook,...)
+### bardensr.spot_calling.estimate_density_singleshot(imagestack,codebook,...)
 
 A correlation-based approach to get a crude estimate of the density.  Fast and adequate for many purposes.  Does not account for a point-spread function.
 
@@ -101,7 +101,7 @@ Output:
 - evidence_tensor (M0 x M1 x M2 x J), a crude estimate for the density
 ```
 
-### bardensr.spot_calling.build_density_iterative(imagestack,codebook,...)
+### bardensr.spot_calling.estimate_density_iterative(imagestack,codebook,...)
 
 An optimization-based approach estimate the density.
 
@@ -167,6 +167,8 @@ Input
 - [optional] niter (integer; default 50; number of 
     rounds of gradient descent to run in estimating 
     the registration)
+- [optional] use_tqdm_notebook (boolean; whether to make progress bar 
+    in jupyter notebook)
     
 Output: corrections (N x 3 numpy array, indicating how each imagestack should be shifted)
 ```
@@ -220,8 +222,8 @@ via interpolation_method) we give the value cval.
 
 ### bardensr.preprocessing.minmax(imagestack)
 
-Performs a simple per-frame normalization on the imagestack (subtract min, then divide by mean)
+Performs a simple per-frame normalization on the imagestack (subtract min, then divide by mean).
 
-### bardensr.preprocessing.bgsubtraction(imagestack,sigmas)
+### bardensr.preprocessing.background_subtraction(imagestack,sigmas)
 
-Perform Lucy-Richardson background subtraction (if you have a GPU, this is generally faster than the CPU-based implementation of Lucy-Richardson found in skimage)
+Perform a dead-basic background subtraction (subtracts a blurred version of the imagestack, and clips to stay positive).
