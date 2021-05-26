@@ -137,7 +137,7 @@ Output:
 - evidence_tensor (M0 x M1 x M2 x J), an estimate for the density giving rise to this imagestack
 ```
 
-### bardensr.spot_calling.find_peaks(evidence_tensor)
+### bardensr.spot_calling.find_peaks(evidence_tensor,...)
 
 ```
 Input:
@@ -173,7 +173,7 @@ Input
 Output: corrections (N x 3 numpy array, indicating how each imagestack should be shifted)
 ```
 
-### bardensr.registration.apply_translations_lowrank(imagestack,corrections,...)
+### bardensr.registration.apply_translations(imagestack,corrections,...)
 
 Apply corrections to an imagestack.
 
@@ -200,25 +200,6 @@ to create a version of imagestack2 which includes as many of the measurements as
 from imagestack.  For more fine-grained control, you can use
 bardensr.floating_slices.
 ```
-
-### bardensr.registration.floating_slices(imagestack,starts,sizes,interpolation_method,cval)
-
-Select spatial slices of an imagestack (possibly from non-integer starting points, using
-interpolation_method to figure out intermediate values).  Roughly speaking,
-
-    result[f] = X[f,t[0]:t[0]+sz[0], t[1]:t[1]+sz[1], ...]
-
-where X=imagestack and t=starts and sz=sizes.  If the relevant indices are out of bounds 
-(or, more specifically, outside the set of locations which can be correctly interpolated 
-via interpolation_method) we give the value cval.
-
-    Input:
-    - imagestack (N x M0 x M1 x M2 numpy array)
-    - starts (N x 3 numpy array)
-    - sizes (N x 3 integer numpy array)
-    - interpolation_method ('hermite' or 'linear' or 'nearest')
-    - cval (scalar; default 0; what to do for oob indexes
-
 
 ### bardensr.preprocessing.minmax(imagestack)
 
