@@ -34,7 +34,7 @@ class HeatKernel:
             assert self.blur_level.shape==(self.nspatial,)
 
     def __matmul__(self,X):
-        if self.blur_level is None:
+        if self.blur_level is None or tuple(self.blur_level)==(0,0,0):
             return X
         else:
             bl=tuple([int(b) for b in self.blur_level])
@@ -304,7 +304,8 @@ class DensityResult:
     reconstruction_density:np.ndarray
     reconstruction_codebook:np.ndarray
 
-def build_density(Xsh,codebook,lam=.01,use_tqdm_notebook=False,niter=120,blur_level=1):
+def build_density(Xsh,codebook,lam=.01,use_tqdm_notebook=False,niter=120,blur_level=1,
+                        update_alpha=True):
     # Xsh -- R,C,M0,M1,M2
     scale_factor=Xsh.max()
     Xsh=Xsh/Xsh.max()
@@ -320,7 +321,8 @@ def build_density(Xsh,codebook,lam=.01,use_tqdm_notebook=False,niter=120,blur_le
         t=range(niter)
     for i in t:
         m.update_F(Xsh)
-        m.update_alpha(Xsh)
+        if update_alpha:
+            m.update_alpha(Xsh)
         m.update_a(Xsh)
         m.update_b(Xsh)
 

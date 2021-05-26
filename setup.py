@@ -14,9 +14,11 @@ setup(
         'bardensr.optimization',
         'bardensr.plotting',
         'bardensr.reconstruction',
+        'bardensr.preprocessing',
         'bardensr.rectangles',
         'bardensr.registration',
         'bardensr.spot_calling',
+        'bardensr.spot_calling.blackberry',
     ],
     package_data={
         '': ['*.hdf5']
