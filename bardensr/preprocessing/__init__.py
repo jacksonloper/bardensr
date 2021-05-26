@@ -8,7 +8,6 @@ __all__=[
 import numpy as np
 from . import preprocessing_tf
 
-
 def colorbleed_plot(framea,frameb):
     '''
     Generates a plot which may help determine if there is colorbleed between two frames.
@@ -36,7 +35,6 @@ def background_subtraction(imagestack,sigmas):
     '''
 
     return preprocessing_tf.background_subtraction(imagestack,[1,2,3],sigmas).numpy()
-
 
 def mnmx(X,axes):
     '''
