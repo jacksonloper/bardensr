@@ -1,7 +1,7 @@
 import numpy as np
 import scipy as sp
 import scipy.spatial.distance
-from .. import kernels
+from ... import blur_kernels as kernels
 import itertools
 import numpy.random as npr
 

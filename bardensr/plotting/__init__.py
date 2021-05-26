@@ -332,10 +332,10 @@ def lutup(A,B,C,D,sc=.5,normstyle='none'):
 
     return rez
 
-def gify(X,sc=.5,normeach=False,duration=250):
+def gify(X,sc=.5,normstyle='none',duration=250):
     import PIL
     import io
-    imgs=[lutup(*x,sc=sc,normeach=normeach) for x in X]
+    imgs=[lutup(*x,sc=sc,normstyle=normstyle) for x in X]
     imgs=[PIL.Image.fromarray(x) for x in imgs]
     with io.BytesIO() as f:
         imgs[0].save(f,save_all=True,append_images=imgs[1:],

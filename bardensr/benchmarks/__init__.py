@@ -146,6 +146,7 @@ class Benchmark:
     GT_voxels: Optional[list] = None  # list of length J.
     GT_meshes: Optional[list] = None  # list of (vertices,faces) of length J
     units: Optional[str] = None # information about voxel units,
+    translations: Optional[np.array] = None # information about how it SHOULD be registered
 
     def __post_init__(self):
         self.n_spots=len(self.rolonies)
@@ -190,7 +191,8 @@ class Benchmark:
     def save_hdf5(self,fn):
         with h5py.File(fn,'w') as f:
             for nm in ['description','name','version','units']:
-                f.attrs[nm]=getattr(self,nm)
+                if getattr(self,nm) is not None:
+                    f.attrs[nm]=getattr(self,nm)
             f.create_dataset('X',data=self.X)
             f.create_dataset('codebook',data=self.codebook)
             f.create_group('rolonies')
@@ -200,6 +202,9 @@ class Benchmark:
             for nm in ['remarks','status']:
                 ds=np.array(self.rolonies[nm]).astype("S")
                 f.create_dataset('rolonies/'+nm,data=ds)
+
+            if self.translations is not None:
+                f.create_dataset('translations',data=self.translations)
 
             if self.GT_voxels is not None:
                 f.create_group('GT_voxels')
@@ -380,6 +385,12 @@ def load_h5py(fn):
             dct['GT_voxels']=pd.DataFrame(rn)
         else:
             dct['GT_voxels']=None
+
+        if 'translations' in f:
+            dct['translations']=f['translations'][:]
+        else:
+            dct['translations']=None
+
 
         if 'GT_meshes' in f:
             mesh_list = []

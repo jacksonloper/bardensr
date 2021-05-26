@@ -1,4 +1,35 @@
+import numpy as np
 from . import preprocessing_tf
+
+
+def colorbleed_plot(framea,frameb):
+    '''
+    Generates a plot which may help determine if there is colorbleed between two frames.
+    '''
+
+    import matplotlib.pylab as plt
+
+
+    plt.hexbin(framea.ravel(),frameb.ravel(),np.ones(np.prod(framea.shape)),
+            reduce_C_function = lambda x: np.log(np.sum(x)),
+            gridsize=50)
+
+def minmax(imagestack):
+    '''
+    Performs a simple per-frame normalization on the imagestack
+    (subtract min, then divide by mean).
+    '''
+
+    return preprocessing_tf.mnmx(imagestack,[1,2,3]).numpy()
+
+def background_subtraction(imagestack,sigmas):
+    '''
+    Perform a dead-basic background subtraction
+    (subtracts a blurred version of the imagestack, and clips to stay positive).
+    '''
+
+    return preprocessing_tf.background_subtraction(imagestack,[1,2,3],sigmas).numpy()
+
 
 def mnmx(X,axes):
     '''

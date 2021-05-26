@@ -32,7 +32,7 @@ from . import simulation
 from . import processing
 from . import denselearner
 from . import training
-from .. import tiling
+from ... import rectangles
 
 import numpy as np
 
