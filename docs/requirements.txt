@@ -1,1 +1,2 @@
 git+https://github.com/jacksonloper/bardensr.git
+myst_parser
