@@ -391,7 +391,6 @@ def load_h5py(fn):
         else:
             dct['translations']=None
 
-
         if 'GT_meshes' in f:
             mesh_list = []
             for i in range(len(f['GT_meshes'])):

@@ -98,10 +98,24 @@ def alpha_3d_shape(pointcloud,circumradius,perturbfactor=1e-10):
 
 
 def dilate_fill(a):
-    b = np.zeros_like(a)
+    b = a.copy()
     for m in range(a.shape[0]):
-        b[m] = sp.ndimage.binary_fill_holes(a[m])
+        b[m] = sp.ndimage.binary_fill_holes(b[m])
+    for m in range(a.shape[1]):
+        b[:,m] = sp.ndimage.binary_fill_holes(b[:,m])
+    for m in range(a.shape[-1]):
+        b[...,m] = sp.ndimage.binary_fill_holes(b[...,m])
     return b
+
+
+
+
+# def dilate_fill(a):
+#     b = np.zeros_like(a)
+#     for m in range(a.shape[0]):
+#         b[m] = sp.ndimage.binary_fill_holes(a[m])
+#     return b
+
 
 def voxelize(mesh, pitch, mins,maxs):
     '''
