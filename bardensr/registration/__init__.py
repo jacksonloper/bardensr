@@ -1,3 +1,8 @@
+__all__=[
+    'find_translations_using_model',
+    'apply_translations',
+]
+
 from . import translations_tf
 import tensorflow as tf
 from .. import misc
@@ -21,16 +26,18 @@ def find_translations_using_model(imagestack,codebook,maximum_wiggle=10,niter=50
     `bardensr.preprocess_minmax` again.
 
     Input
+
     - imagestack (N x M0 x M1 x M2 numpy array)
     - codebook (N x J numpy array)
     - [optional] maximum_wiggle (tuple of 3 integers;
-        default (10,10,10); maximum possible wiggle
-        permitted along each spatial dimension)
+      default (10,10,10); maximum possible wiggle
+      permitted along each spatial dimension)
     - [optional] niter (integer; default 50; number of
-        rounds of gradient descent to run in estimating
-        the registration)
+      rounds of gradient descent to run in estimating
+      the registration)
 
     Output: corrections (N x 3 numpy array, indicating how each imagestack should be shifted)
+
     '''
 
     if imagestack.shape[0]==1:
@@ -56,28 +63,30 @@ def apply_translations(imagestack,corrections,mode='valid',interpolation_method=
     '''
     Apply corrections to an imagestack.
 
-    ```
-    Input
+    Input:
+
     - imagestack (N x M0 x M1 x M2 numpy array)
     - corrections (N x 3)
     - mode ('valid' or 'full'; this indicates what to do with voxels
-        for which not all frames have been measured.  valid trims them
-        out, full sets them to zero.)
-    - interpolation_method ('hermite' or 'linear' or 'nearest'; how to deal with cases where corrections are not integers)
+      for which not all frames have been measured.  valid trims them
+      out, full sets them to zero.)
+    - interpolation_method ('hermite' or 'linear' or 'nearest';
+      how to deal with cases where corrections are not integers)
 
     Output:
+
     - imagestack2 (N x M0' x M1' x M2')
     - trimmed_corrections (N x 3 array, indicating the cooridnates in imagestack which are
-        used to supply imagestack2[:,0,0,0], i.e.
-            imagestack[f,translation[f,0],ranslation[f,1],ranslation[f,1]
-                    \approx
-            imagestack2[f,0,0,0]
+      used to supply imagestack2[:,0,0,0], i.e.
+      imagestack[f,translation[f,0],ranslation[f,1],ranslation[f,1] approx
+      imagestack2[f,0,0,0]
 
     This function These may be different from the supplied corrections: depending upon
     the supplied value of 'mode', we may apply a global shift to 'corrections'
     to create a version of imagestack2 which includes as many of the measurements as possible
     from imagestack.  For more fine-grained control, you can use
-    bardensr.floating_slices.'''
+    bardensr.floating_slices.
+    '''
 
     if imagestack.shape[0]==1:
         raise ValueError("this imagestack has only one frame; it is meaningless"

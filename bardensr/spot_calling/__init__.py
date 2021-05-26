@@ -1,3 +1,9 @@
+__all__=[
+    'estimate_density_iterative',
+    'estimate_density_singleshot',
+    'find_peaks',
+]
+
 import tensorflow as tf
 import pandas as pd
 import numpy as np
@@ -13,34 +19,35 @@ def estimate_density_iterative(imagestack,codebook,l1_penalty=0,psf_radius=(0,0,
     An optimization-based approach estimate the density.
 
     Input:
+
     - imagestack (N x M0 x M1 x M2 numpy array)
     - codebook (N x J numpy array)
     - [optional] l1_penalty (a penalty which sends spurious
-        noise signals to zero; this should be higher if the
-        noise-level is higher)
+      noise signals to zero; this should be higher if the
+      noise-level is higher)
     - [optional] psf_radius (a tuple of 3 numbers; default
-        (0,0,0); your estimate of the psf magnitude in units
-        of voxels for each spatial axis of the imagestack
-        (shape of psf is assumed to be Gaussian))
+      (0,0,0); your estimate of the psf magnitude in units
+      of voxels for each spatial axis of the imagestack
+      (shape of psf is assumed to be Gaussian))
     - [optional] iterations (number of iterations to train;
-        default is 100)
+      default is 100)
     - [optional] estimate_codebook_gain (boolean; default
-        True; if True, we will attempt to correct the codebook
-        for any per-frame gains, e.g. if frame 4 of the imagestack
-        is 10 times brighter than all other frames)
+      True; if True, we will attempt to correct the codebook
+      for any per-frame gains, e.g. if frame 4 of the imagestack
+      is 10 times brighter than all other frames)
     - [optional] rounds (integer default None; if provided, must
-        divide evenly into N, and it is then assumed that the
-        frames can be understood as R rounds of imaging with N/C channels per round)
+      divide evenly into N, and it is then assumed that the
+      frames can be understood as R rounds of imaging with N/C channels per round)
     - [optional] estimate_colormixing (boolean; default False;
-        if True, we will attempt to correct the codebook for
-        color bleed between channels; only works if "rounds" is provided)
+      if True, we will attempt to correct the codebook for
+      color bleed between channels; only works if "rounds" is provided)
     - [optional] estimate_phasing (boolean; default False; if
-        True, we will attempt to correct the codebook for
-        incomplete clearing of signal between rounds; only works
-        if "rounds" is provided)
+      True, we will attempt to correct the codebook for
+      incomplete clearing of signal between rounds; only works
+      if "rounds" is provided)
 
-    Output:
-    - evidence_tensor (M0 x M1 x M2 x J), an estimate for the density giving rise to this imagestack
+    Output is an evidence_tensor (M0 x M1 x M2 x J), an estimate for the
+    density giving rise to this imagestack
     '''
 
     F=imagestack.shape[0]
@@ -87,13 +94,13 @@ def estimate_density_singleshot(
     Fast and adequate for many purposes.  Does not account for a point-spread function.
 
     Input:
+
     - imagestack (N x M0 x M1 x M2 numpy array)
     - codebook (N x J numpy array)
     - noisefloor (a floating point number indicating your
-        estimate for what level of signal is "noise")
+      estimate for what level of signal is "noise")
 
-    Output:
-    - evidence_tensor (M0 x M1 x M2 x J), a crude estimate for the density
+    Output: evidence_tensor (M0 x M1 x M2 x J), a crude estimate for the density
     '''
 
     return barcodesfirst.build_evidence_tensor(
@@ -151,12 +158,16 @@ def peak_call(densities,poolsize,thresh):
 
 def find_peaks(densities,thresh,poolsize=(1,1,1)):
     '''
+    Find bumps in an evidence tensor.
+
     Input:
+
     - evidence tensor (M0 x M1 x M2 x J)
     - threshold
     - [optional] radius (tuple of 3 numbers; default (1,1,1); indicating the minimum possible size of a bump)
 
     Output: bumps, a pandas dataframe with the following columns
+
     - m0 -- where the bumps were found along the first spatial dimension
     - m1 -- where the bumps were found along the second spatial dimension
     - m2 -- where the bumps were found along the third spatial dimension
