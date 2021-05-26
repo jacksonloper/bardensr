@@ -6,15 +6,24 @@ This package is a collection of tools for dealing with spatial multiplexed data.
 
 1. The tissue.  There is a two- or three-dimensional object being examined.  In deference to the spatial transcriptomics applications, this object will hereafter be called the **"tissue."**
 2. The genes.  There are several different kinds of objects which manifest in the tissue (e.g. different types of rolonies in a spatial transcriptomics experiment).  Hereafter, each kind of object will be referred to as a **"gene."**  We will let J denote the total number of different genes.
-3. The voxels.  The tissue is measured on a two- or three- dimensional grid.  Hereafter, each measured location will be referred to as a **"voxel."**. We will let M denote the total number of voxels.
+3. The voxels.  The tissue is measured on a two- or three- dimensional grid.  Hereafter, each measured location will be referred to as a **"voxel."**  We will let M denote the total number of voxels.
 4. The gene density.  For each voxel (m) and each gene (j), we may imagine that there is a positive number indicating something like the density of that gene within that voxel.   We will herafter refer to this as the **gene density**.
-5. The frames and imagestack.  The tissue is measured several times under different conditions (e.g. with different lasers, in different rounds of a spatial transcriptomics experiment).  Hereafter, each condition will be referred to as a **"frame."**. Collectively, the measurements for all voxels under all conditions will be called the **"imagestack."**. We will let N denote the total number of frames.
+5. The frames and imagestack.  The tissue is measured several times under different conditions (e.g. with different lasers, in different rounds of a spatial transcriptomics experiment).  Hereafter, each condition will be referred to as a **"frame."**  Collectively, the measurements for all voxels under all conditions will be called the **"imagestack."**  We will let F denote the total number of frames.
 6. The model.  Given the density, we assume the imagestack may be approximately modeled using the following observation model:
     1. First, apply a linear transformation to the density, independently for each genes.  This linear transformation will typically be something like a blur kernel. It will hereafter be referred to as the **"point-spread function"** and the result will be called the **"blurred density"**.
     2.  Second, apply a linear transformation to the blurred density, indepently for each voxel.  This linear transformation can be understood as an NxJ matrix.  It will hereafter be referred to as the **"codebook"** and the result will be called the **"noiseless imagestack"**.
     3.  Finally, add noise to the noiseless imagestack.
 
-## What does it do?
+Put another way, slightly more concisely:
+- There are J different "genes" (e.g. 300 different kinds of RNA transcripts)
+- There is a grid of M0 x M1 x M2 "voxels" (e.g. 2048 x 2048 x 150 voxels)
+- There are F different "frames" (e.g. 7 rounds and 4 channels = 28 frames)
+- There is an unobservable M0 x M1 x M2 x J "density" giving a nonnegative value for each gene at each voxel
+- There is a FxJ "codebook" matrix full of nonnegative numbers, indicating how much we expect a given gene (j) to contribute to the observations at given frame (f).
+- We observe a F x M0 x M1 x M2 "imagestack" giving a nonnegative value for each frame at each voxel
+- Given the density, we assume the imagestack can be modelled by the following process: blur along the spatial dimensions, apply the codebook along the gene dimensions, and add noise.
+
+## What can BARDENSR do?
 
 Currently:
 
@@ -24,8 +33,9 @@ Currently:
 - Registration
     - Generate movies which can help identify if the imagestack has registration issues.
     - Find translations of an imagestack so that for each frame the same voxel corresponds to the same physical location in the tissue.
-- Preprocess an imagestack (background subtraction, normalization)
-- Generate figures which can help identify colorbleed in the imagestack.
+- Preprocessing
+    - GPU-accelerated background subtraction via Lucy-Richardson
+    - Generate figures which can help identify colorbleed in the imagestack (and suggest a correction)
 
 We are working on a few additional algorithms for the following tasks.  These can be found if you dig into this code, but they are not really ready for public use.
 
@@ -33,6 +43,7 @@ We are working on a few additional algorithms for the following tasks.  These ca
 - Correct vignetting artifacts in an imagestack.
 - Stitch several imagestacks together from different fields of view.
 - Find affine transformation of an imagestack so that for each frame the same voxel corresponds to the same physical location in the tissue.
+- Attempt to reconstruct cell morphology from a density.  
 
 ## How do I use it?
 
