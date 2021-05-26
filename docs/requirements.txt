@@ -1,0 +1,1 @@
+bardensr==0.3 git+https://github.com/jacksonloper/bardensr.git
