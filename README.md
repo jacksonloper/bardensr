@@ -4,19 +4,19 @@
 
 This package is a collection of tools for dealing with spatial multiplexed data.  Specifically, we assume the following setup.
 
-1. The tissue.  There is a two- or three-dimensional object being examined.  In deference to the spatial transcriptomics applications, this object will hereafter be called the **"tissue."**
-2. The genes.  There are several different kinds of objects which manifest in the tissue (e.g. different types of rolonies in a spatial transcriptomics experiment).  Hereafter, each kind of object will be referred to as a **"gene."**  We will let J denote the total number of different genes.
+1. The samples.  There is a two- or three-dimensional object being examined.  In deference to the spatial transcriptomics applications, this object will hereafter be called the **"samples."** (*this could be tissues, or slide from the cell culture, as in Jellerts lab applications*) 
+2. The barcodes.  There are several different kinds of objects which manifest in the tissue (e.g. different types of rolonies in a spatial transcriptomics experiment).  Hereafter, each kind of object will be referred to as a **"barcodes."**  We will let J denote the total number of different barcodes.*note that barcodes can correspond to genes, but not necessary, for instance in the cellular barcoding applications barcodes are nucleotide sequence but not genes.*
     2.  Second, apply a linear transformation to the blurred density, indepently for each voxel.  This linear transformation can be understood as an NxJ matrix.  It will hereafter be referred to as the **"codebook"** and the result will be called the **"noiseless imagestack"**.
     3.  Finally, add noise to the noiseless imagestack.
 
 Put another way, slightly more concisely:
-- There are J different "genes" (e.g. 300 different kinds of RNA transcripts)
+- There are J different "barcodes" (e.g. 300 different barcodes labeling 300 RNA transcripts)
 - There is a grid of M0 x M1 x M2 "voxels" (e.g. 2048 x 2048 x 150 voxels)
-- There are F different "frames" (e.g. 7 rounds and 4 channels = 28 frames)
-- There is an unobservable M0 x M1 x M2 x J "density" giving a nonnegative value for each gene at each voxel
-- There is a FxJ "codebook" matrix full of nonnegative numbers, indicating how much we expect a given gene (j) to contribute to the observations at given frame (f).
-- We observe a F x M0 x M1 x M2 "imagestack" giving a nonnegative value for each frame at each voxel
-- Given the density, we assume the imagestack can be modelled by the following process: blur along the spatial dimensions, apply the codebook along the gene dimensions, and add noise.
+- There are N different "frames" (e.g. 7 imaging rounds and 4 channels = 28 frames)
+- There is an unobservable M0 x M1 x M2 x J "density" giving a nonnegative value for each barcodes at each voxel
+- There is a NxJ "codebook" matrix full of nonnegative numbers, indicating how much we expect a given barcode (j) to contribute to the observations at given frame (f).
+- We observe a N x M0 x M1 x M2 "imagestack" giving a nonnegative value for each frame at each voxel
+- Given the density, we assume the imagestack can be modelled by the following process: blur along the spatial dimensions, apply the codebook along the barcodes dimensions, and add noise.
 
 ## What can BarDensr do?
 
@@ -60,7 +60,7 @@ The public API (at [readthedocs](http://bardensr.readthedocs.io)) and the [examp
 
 ## FAQ
 
-### How do I make bardensr use GPUs?  How do make it use CPUs?
+### How do I make bardensr use GPUs?  How do I  make it use CPUs?
 
 The heavy lifting of this package is all performed by tensorflow.  As such, if you want to insist that the lifting is run on a GPU or CPU, you can wrap function calls with `tf.device`.  The simplest version of this pattern is as follows:
 
