@@ -1,4 +1,4 @@
-# BARDENSR
+# BarDensr
 
 ## What is it for?
 
@@ -18,7 +18,7 @@ Put another way, slightly more concisely:
 - We observe a F x M0 x M1 x M2 "imagestack" giving a nonnegative value for each frame at each voxel
 - Given the density, we assume the imagestack can be modelled by the following process: blur along the spatial dimensions, apply the codebook along the gene dimensions, and add noise.
 
-## What can BARDENSR do?
+## What can BarDensr do?
 
 Currently:
 
