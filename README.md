@@ -4,12 +4,6 @@
 
 This package is a collection of tools for dealing with spatial multiplexed data.  Specifically, we assume the following setup.
 
-1. The tissue.  There is a two- or three-dimensional object being examined.  In deference to the spatial transcriptomics applications, this object will hereafter be called the **"tissue."**
-2. The genes.  There are several different kinds of objects which manifest in the tissue (e.g. different types of rolonies in a spatial transcriptomics experiment).  Hereafter, each kind of object will be referred to as a **"gene."**  We will let J denote the total number of different genes.
-    2.  Second, apply a linear transformation to the blurred density, indepently for each voxel.  This linear transformation can be understood as an NxJ matrix.  It will hereafter be referred to as the **"codebook"** and the result will be called the **"noiseless imagestack"**.
-    3.  Finally, add noise to the noiseless imagestack.
-
-Put another way, slightly more concisely:
 - There are J different "genes" (e.g. 300 different kinds of RNA transcripts)
 - There is a grid of M0 x M1 x M2 "voxels" (e.g. 2048 x 2048 x 150 voxels)
 - There are F different "frames" (e.g. 7 rounds and 4 channels = 28 frames)
