@@ -1,6 +1,6 @@
 .. bardensr documentation master file
 
-Welcome to BARDENSR's documentation!
+Welcome to BarDensr's documentation!
 ====================================
 
 .. toctree::
