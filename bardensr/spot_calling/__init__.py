@@ -171,7 +171,7 @@ def find_peaks(densities,thresh,poolsize=(1,1,1)):
     - m0 -- where the bumps were found along the first spatial dimension
     - m1 -- where the bumps were found along the second spatial dimension
     - m2 -- where the bumps were found along the third spatial dimension
-    - j -- where the bumps wereradi found along the gene dimension
+    - j -- where the bumps were found along the gene dimension
     - magnitude -- value of evidence_tensor in the middle of the bump
     '''
 

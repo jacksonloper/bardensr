@@ -310,7 +310,7 @@ def build_density(Xsh,codebook,lam=.01,scale_factor = None, use_tqdm_notebook=Fa
                         update_alpha=True):
     # Xsh -- R,C,M0,M1,M2
     if scale_factor is None:
-        scale_factor=Xsh.max()
+        scale_factor=1
     Xsh=Xsh/scale_factor
 
     Xsh=tf.convert_to_tensor(np.transpose(Xsh,[2,3,4,0,1]))
