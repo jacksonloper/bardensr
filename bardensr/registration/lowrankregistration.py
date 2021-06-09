@@ -111,7 +111,7 @@ def minimize(method,inner_func,t,maxiter,momentum=0.8,lr=None,first_step_size=.1
                 raise NotImplementedError(first_step_size_norm)
             lr=first_step_size/mag
 
-        opt=tf.optimizers.SGD(momentum=momentum,lr=lr)
+        opt=tf.optimizers.SGD(momentum=momentum,learning_rate=lr)
         for i in range(maxiter):
             l,g=inner_func(tf.convert_to_tensor(t))
             losses.append(l.numpy())
@@ -135,6 +135,7 @@ def lowrankregister(mini,codebook,zero_padding=10,
             optimization_method=optimization_method,
             optimization_settings=optimization_settings,
             compiled_functions=compiled_functions)
+
     return ts[-1]
 
 def _lowrankregister(mini,codebook,zero_padding=10,
