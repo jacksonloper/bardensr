@@ -111,9 +111,12 @@ def minimize(method,inner_func,t,maxiter,momentum=0.8,lr=None,first_step_size=.1
                 raise NotImplementedError(first_step_size_norm)
             lr=first_step_size/mag
 
+        assert not np.isnan(lr),f'initial gradient magnitude={mag}'
+
         opt=tf.optimizers.SGD(momentum=momentum,learning_rate=lr)
         for i in range(maxiter):
-            l,g=inner_func(tf.convert_to_tensor(t))
+            assert not np.isnan(t.numpy()).any()
+            l,g=inner_func(t)
             losses.append(l.numpy())
             ts.append(t.numpy().copy())
             if counter is not None:
