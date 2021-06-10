@@ -132,7 +132,7 @@ def _peak_call(densities,poolsize,thresh):
         tf.range(len(densities.shape)-1)
     ],0)
     densities=tf.transpose(densities,transposal)[...,None] # J X M0 x M1 X ... x M(n-1) x 1
-    mp=tf.nn.max_pool(densities,poolsize,1,'SAME')
+    mp=tf.nn.max_pool(densities,poolsize,1,'SAME')  # take the max in the window of poolsize. 
     locs=tf.where(mp==densities)
     vals=tf.gather_nd(mp,locs)
     locs=locs[vals>thresh]
@@ -164,7 +164,7 @@ def find_peaks(densities,thresh,poolsize=(1,1,1)):
 
     - evidence tensor (M0 x M1 x M2 x J)
     - threshold
-    - [optional] radius (tuple of 3 numbers; default (1,1,1); indicating the minimum possible size of a bump)
+    - [optional] poolsize (tuple of 3 numbers; default (1,1,1); indicating the minimum possible size of a bump)
 
     Output: bumps, a pandas dataframe with the following columns
 
