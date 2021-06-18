@@ -1,3 +1,5 @@
+__version__="0.3.1"
+
 from . import registration,spot_calling,preprocessing,benchmarks
 
 def ipydoc(x,saynm=True,strip4=True):
