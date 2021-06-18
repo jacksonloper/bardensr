@@ -116,7 +116,7 @@ def minimize(method,inner_func,t,maxiter,momentum=0.8,lr=None,first_step_size=.1
         opt=tf.optimizers.SGD(momentum=momentum,learning_rate=lr)
         for i in range(maxiter):
             assert not np.isnan(t.numpy()).any()
-            l,g=inner_func(t)
+            l,g=inner_func(tf.convert_to_tensor(t))
             losses.append(l.numpy())
             ts.append(t.numpy().copy())
             if counter is not None:
