@@ -47,6 +47,8 @@ def calc_circum(V):
 
     return circumcenters,circumradii
 
+
+
 def alpha_3d_shape(pointcloud,circumradius,perturbfactor=1e-10):
     perturb=np.ptp(pointcloud)*perturbfactor
     pointcloud=pointcloud+(npr.rand(*pointcloud.shape)-.5)*perturb
@@ -55,7 +57,6 @@ def alpha_3d_shape(pointcloud,circumradius,perturbfactor=1e-10):
     s=dl.simplices
     s=pointcloud[s]
     circumcenters,sizes=calc_circum(s)
-
     # find out which simplices are good
     good = sizes < circumradius
 
