@@ -105,3 +105,25 @@ def mnmx_background_subtraction(X,axes,sigmas):
     X=mnmx(X,axes)
 
     return X
+
+@tf.function
+def background_subtraction(X,axes,sigmas):
+    '''
+    Input4
+    - X -- M0 x M1 x M2 ... x M(n-1)
+    - axes -- set of integers in {0,1,...n-1}
+    - blurs -- corresponding floating points
+
+    this
+    1. runs gaussian background subtraction along axes sigmas
+    2. normalizes by min and max along axes
+    '''
+
+    bl=X
+    for s,ax in zip(sigmas,axes):
+        bl=blur_kernels.gaussian_filter_1d(X, s, ax)
+
+    X=X-bl
+    X=tf.clip_by_value(X,0,X.dtype.max)
+
+    return X

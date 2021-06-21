@@ -34,7 +34,7 @@ class HeatKernel:
             assert self.blur_level.shape==(self.nspatial,)
 
     def __matmul__(self,X):
-        if self.blur_level is None:
+        if self.blur_level is None or tuple(self.blur_level)==(0,0,0):
             return X
         else:
             bl=tuple([int(b) for b in self.blur_level])
@@ -197,14 +197,16 @@ class Model:
              = .5* ||KFG^T||^2 - tr((KFG^T) (X - ab - lam)^T)
              = .5* tr(KFG^T G F^T K) - tr(F G (X - ab - lam)^T K)
         '''
-
+        
         linear_term = (self.K@ xmabl) @ G
 
         def apply_Gamma(x):
             return self.apply_Gamma(x,tf.transpose(G),G)
 
-        self.F = helpers_tf.nonnegative_update(apply_Gamma,linear_term,self.F)
+        self.F = helpers_tf.nonnegative_update(apply_Gamma,linear_term,self.F)               
         self.F_blurred = self.K@self.F
+        
+        
 
     def update_alpha(self,X):
         # get the update
@@ -304,10 +306,12 @@ class DensityResult:
     reconstruction_density:np.ndarray
     reconstruction_codebook:np.ndarray
 
-def build_density(Xsh,codebook,lam=.01,use_tqdm_notebook=False,niter=120,blur_level=1):
+def build_density(Xsh,codebook,lam=.01,scale_factor = None, use_tqdm_notebook=False,niter=120,blur_level=1,
+                        update_alpha=True):
     # Xsh -- R,C,M0,M1,M2
-    scale_factor=Xsh.max()
-    Xsh=Xsh/Xsh.max()
+    if scale_factor is None:
+        scale_factor=1
+    Xsh=Xsh/scale_factor
 
     Xsh=tf.convert_to_tensor(np.transpose(Xsh,[2,3,4,0,1]))
 
@@ -320,12 +324,13 @@ def build_density(Xsh,codebook,lam=.01,use_tqdm_notebook=False,niter=120,blur_le
         t=range(niter)
     for i in t:
         m.update_F(Xsh)
-        m.update_alpha(Xsh)
+        if update_alpha:
+            m.update_alpha(Xsh)
         m.update_a(Xsh)
         m.update_b(Xsh)
 
-    rez=m.F_scaled()
-    rez=rez/rez.max()
+    rez=m.F_scaled()  
+#     rez=rez/rez.max()
 
     reconstruction_density=m.F_blurred.numpy()
     reconstruction_codebook=m.frame_loadings().numpy()
