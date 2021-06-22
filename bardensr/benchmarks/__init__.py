@@ -12,6 +12,86 @@ from . import simulations
 from . import locsdf
 
 @dataclasses.dataclass
+class ColoredPointcloudMatching:
+    fn:int
+    fp:int
+    fn_indices:np.array
+    fp_indices:np.array
+    fn_df:pd.DataFrame
+    fp_df:pd.DataFrame
+    agreement_df:pd.DataFrame
+
+def match_colored_pointclouds(gt,df,radius,good_subset=None):
+    if len(df)==0:
+        noro=locsdf.locs_and_j_to_df(
+            np.zeros((0,3),dtype=np.int),
+            np.zeros(0,dtype=np.int),
+        ),
+        return RolonyFPFNResult(
+            fn=self.n_spots,
+            fp=0,
+            fn_indices=np.zeros(0,dtype=np.int),
+            fp_indices=np.zeros(0,dtype=np.int),
+            fp_rolonies=noro,
+            fn_rolonies=self.rolonies.copy(),
+            agreement_rolonies=noro,
+        )
+
+    my_locs=np.c_[
+        gt['m0'],
+        gt['m1'],
+        gt['m2']
+    ]
+    my_j=np.array(gt['j'])
+
+    their_locs=np.c_[
+        df['m0'],
+        df['m1'],
+        df['m2'],
+    ]
+    their_j=np.array(df['j'])
+
+    dsts=sp.spatial.distance.cdist(my_locs,their_locs)
+
+    agreement=(my_j[:,None]==their_j[None,:])
+    dsts[~agreement]=np.inf # if the genes don't agree, it doesn't count
+
+
+    # of the spots that we have that are good
+    # how many are in df?
+    goodies=np.ones(len(gt),dtype=bool)
+    good_locs=my_locs[goodies]
+    good_j=my_j[goodies]
+    dists_from_goods_to_closest_in_them = np.min(dsts[goodies],axis=1)
+    missing_goodies=dists_from_goods_to_closest_in_them>radius
+    spots_they_missed=np.sum(missing_goodies)
+
+    # of the spots that they have
+    # how many spots do we have?
+    dists_from_them_to_closest_in_me_that_isnt_bad = np.min(dsts,axis=0)
+    fantasized_bad=dists_from_them_to_closest_in_me_that_isnt_bad>radius
+    spots_they_made_up=np.sum(fantasized_bad)
+
+    return ColoredPointcloudMatching(
+        fn=spots_they_missed,
+        fp=spots_they_made_up,
+        fn_indices=np.where(goodies)[0][missing_goodies], # fn_indices[3] says which benchmark spot we failed at
+        fp_indices=np.where(fantasized_bad)[0],
+        fn_df=locsdf.locs_and_j_to_df(
+            good_locs[missing_goodies],
+            good_j[missing_goodies]
+        ),
+        fp_df=locsdf.locs_and_j_to_df(
+            their_locs[fantasized_bad],
+            their_j[fantasized_bad],
+        ),
+        agreement_df=locsdf.locs_and_j_to_df(
+            their_locs[~fantasized_bad],
+            their_j[~fantasized_bad],
+        )
+    )
+
+@dataclasses.dataclass
 class RolonyFPFNResult:
     fn:int
     fp:int

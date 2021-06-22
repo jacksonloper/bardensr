@@ -57,7 +57,7 @@ def estimate_density_iterative(imagestack,codebook,l1_penalty=0,psf_radius=(0,0,
     if rounds is None:
         rounds=1
     else:
-        assert F%imagestack==0
+        assert F%rounds==0
     imagestack_rc = imagestack.reshape((rounds,F//rounds,)+imagestack.shape[1:])
     codebook = codebook.reshape((rounds,F//rounds,codebook.shape[-1]))
 
