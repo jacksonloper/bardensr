@@ -132,10 +132,8 @@ def _peak_call(densities,poolsize,thresh):
         tf.range(len(densities.shape)-1)
     ],0)
     densities=tf.transpose(densities,transposal)[...,None] # J X M0 x M1 X ... x M(n-1) x 1
-    mp=tf.nn.max_pool(densities,poolsize,1,'SAME')  # take the max in the window of poolsize. 
-    locs=tf.where(mp==densities)
-    vals=tf.gather_nd(mp,locs)
-    locs=locs[vals>thresh]
+    mp=tf.nn.max_pool(densities,poolsize,1,'SAME')  # take the max in the window of poolsize.
+    locs=tf.where((mp==densities)&(mp>thresh))
     return locs
 
 def peak_call(densities,poolsize,thresh):
