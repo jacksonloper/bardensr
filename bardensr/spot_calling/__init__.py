@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 from . import barcodesfirst
 from . import blackberry
+from .. import misc
 
 def estimate_density_iterative(imagestack,codebook,l1_penalty=0,psf_radius=(0,0,0),
                     iterations=100,estimate_codebook_gain=True,
@@ -133,8 +134,25 @@ def _peak_call(densities,poolsize,thresh):
     ],0)
     densities=tf.transpose(densities,transposal)[...,None] # J X M0 x M1 X ... x M(n-1) x 1
     mp=tf.nn.max_pool(densities,poolsize,1,'SAME')  # take the max in the window of poolsize.
+
+    mp=mp[...,0]
+    densities=densities[...,0]
+
     locs=tf.where((mp==densities)&(mp>thresh))
     return locs
+
+def _peak_call_1(densities,poolsize,thresh):
+    '''
+    Input
+    - densities, M0 x M1 x ... M(n-1)
+    - poolsize, tuple of ints
+    - thresh, scalar
+
+    Output
+    - peaks, n_peaks x n
+    '''
+
+    return _peak_call(densities[...,None],poolsize,thresh)[...,1:]
 
 def peak_call(densities,poolsize,thresh):
     '''
@@ -154,7 +172,7 @@ def peak_call(densities,poolsize,thresh):
 
     return pd.DataFrame(dct)
 
-def find_peaks(densities,thresh,poolsize=(1,1,1)):
+def find_peaks(densities,thresh,poolsize=(1,1,1),use_tqdm_notebook=False):
     '''
     Find bumps in an evidence tensor.
 
@@ -173,15 +191,23 @@ def find_peaks(densities,thresh,poolsize=(1,1,1)):
     - magnitude -- value of evidence_tensor in the middle of the bump
     '''
 
+    J=densities.shape[-1]
+
     poolsize = tuple([int(x*2+1) for x in poolsize])
 
     thresh=tf.convert_to_tensor(thresh,dtype=tf.float32)
     densities=tf.convert_to_tensor(densities,dtype=tf.float32)
-    locs=_peak_call(densities,poolsize,thresh).numpy()
+
+    locs=[]
+    for j in misc.maybe_trange(J,use_tqdm_notebook):
+        sublocs=_peak_call_1(densities[...,j],poolsize,thresh).numpy()
+        sublocs=np.c_[sublocs,np.ones(len(sublocs),dtype=sublocs.dtype)*j]
+        locs.append(sublocs)
+    locs=np.concatenate(locs,axis=0)
 
     dct={}
-    for i in range(locs.shape[1]-2):
-        dct[f'm{i}']=locs[:,i+1]
-    dct['j']=locs[:,0]
+    for i in range(locs.shape[1]-1):
+        dct[f'm{i}']=locs[:,i]
+    dct['j']=locs[:,-1]
 
     return pd.DataFrame(dct)
