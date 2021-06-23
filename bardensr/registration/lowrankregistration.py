@@ -130,12 +130,12 @@ def minimize(method,inner_func,t,maxiter,momentum=0.8,lr=None,first_step_size=.1
 
 def lowrankregister(mini,codebook,zero_padding=10,
             use_tqdm_notebook=False,niter=50,
-            optimization_method='sgd',
+            optimization_method='sgd',initial_guess=None,
             optimization_settings=None,
             compiled_functions=None):
     ts,losses,optim=_lowrankregister(mini,codebook,zero_padding=zero_padding,
             use_tqdm_notebook=use_tqdm_notebook,niter=niter,
-            optimization_method=optimization_method,
+            optimization_method=optimization_method,initial_guess=initial_guess,
             optimization_settings=optimization_settings,
             compiled_functions=compiled_functions)
 
@@ -143,7 +143,7 @@ def lowrankregister(mini,codebook,zero_padding=10,
 
 def _lowrankregister(mini,codebook,zero_padding=10,
             use_tqdm_notebook=False,niter=50,
-            optimization_method='sgd',
+            optimization_method='sgd',initial_guess=None,
             optimization_settings=None,
             compiled_functions=None):
     '''
@@ -172,7 +172,15 @@ def _lowrankregister(mini,codebook,zero_padding=10,
     minitf,codetf,zero_padding,sz=_procminicode(mini,codebook,zero_padding)
 
     # set up tf variables we need
-    t=np.zeros((F,nd))-zero_padding
+    t=np.zeros((F,nd))-zero_padding  # e.g. grab floatingslice on interval [-10,shp+10]
+
+    # if supplied, add in initial guess (with mean taken out)
+    if initial_guess is not None:
+        initial_guess=np.require(initial_guess,dtype=float)
+        if initial_guess.shape!=(F,nd):
+            raise ValueError(f"initial guess has wrong shape, should be {F} x {nd}")
+        t=t+initial_guess-np.mean(initial_guess,axis=0,keepdims=True)
+
     t=tf.identity(t)
     t=tf.cast(t,dtype=tf.float64)
 

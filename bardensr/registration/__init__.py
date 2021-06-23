@@ -11,12 +11,13 @@ import scipy as sp
 import scipy.ndimage
 import numpy as np
 import numbers
+import scipy.signal
 import typing
 from .analytic_centering import calc_reasonable_rectangles
 from .lowrankregistration import lowrankregister
 
 def find_translations_using_model(imagestack,codebook,maximum_wiggle=10,niter=50,
-                                    use_tqdm_notebook=False):
+                                    use_tqdm_notebook=False,initial_guess=None):
     '''
     A method that uses the codebook and the model to find a
     translation of the imagestack which is more consistent with
@@ -35,6 +36,7 @@ def find_translations_using_model(imagestack,codebook,maximum_wiggle=10,niter=50
     - [optional] niter (integer; default 50; number of
       rounds of gradient descent to run in estimating
       the registration)
+    - [optional] initial guess (N x 3 numpy array)
 
     Output: corrections (N x 3 numpy array, indicating how each imagestack should be shifted)
 
@@ -49,7 +51,7 @@ def find_translations_using_model(imagestack,codebook,maximum_wiggle=10,niter=50
     nonzero_guys = tuple([i for i in range(1,4) if imagestack.shape[i]>1])
 
     imagestack_sq=np.squeeze(imagestack)
-    corrections=lowrankregister(imagestack_sq,codebook,
+    corrections=lowrankregister(imagestack_sq,codebook,initial_guess=initial_guess,
         zero_padding=maximum_wiggle,niter=niter,use_tqdm_notebook=use_tqdm_notebook) # N x
 
     result=np.zeros((codebook.shape[0],3))
