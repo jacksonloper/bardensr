@@ -11,3 +11,4 @@ Public API
    registration
    preprocessing
    plotting
+   benchmarks

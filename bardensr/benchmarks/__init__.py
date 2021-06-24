@@ -1,3 +1,10 @@
+__all__=[
+    'match_colored_pointclouds',
+    'ColoredPointcloudMatching',
+    'locs_and_j_to_df',
+    'df_to_locs_and_j',
+]
+
 import h5py
 import dataclasses
 import numpy as np
@@ -11,8 +18,23 @@ from .. import misc
 from . import simulations
 from . import locsdf
 
+from .locsdf import locs_and_j_to_df,df_to_locs_and_j
+
 @dataclasses.dataclass
 class ColoredPointcloudMatching:
+    '''
+    Information about correspondences between two colored
+    point-clouds.  Attributes...
+
+    - fn -- number of points in pointcloud A which can't be found in pointcloud B
+    - fp -- number of points in pointcloud B which can't be found in pointcloud A
+    - fn_indices -- indices of points in pointcloud A which can't be found in pointcloud B
+    - fp_indices -- indices of points in pointcloud B which can't be found in pointcloud A
+    - fn_df -- a dataframe of points in pointcloud A which can't be found in pointcloud B
+    - fp_df -- a dataframe of points in pointcloud B which can't be found in pointcloud A
+    - agreement_df -- a dataframe of points in pointcloud B which have a nearby guy in pointcloud A
+    - radius -- the distance threshold used to determine if a two points with the same color are "matched"
+    '''
     fn:int
     fp:int
     fn_indices:np.array
@@ -20,22 +42,30 @@ class ColoredPointcloudMatching:
     fn_df:pd.DataFrame
     fp_df:pd.DataFrame
     agreement_df:pd.DataFrame
+    radius:float
 
-def match_colored_pointclouds(gt,df,radius,good_subset=None):
+def match_colored_pointclouds(gt,df,radius):
+    '''
+    Match two colored pointclouds in 3d space.
+    Colored pointclouds should be represented a dataframes
+    with 3 spatial columns (named m0,m1,m2) and a coloring
+    column (named j).
+
+    Input
+
+    - gt, a pandas.dataframe (with columns m0,m1,m2, and j)
+    - df, a pandas.dataframe (with columns m0,m1,m2, and j)
+    - radius, a scalar
+
+    Output is a ColoredPointcloudMatching indicating
+    correspondences between the dataframes.
+
+    See also bardensr.benchmarks.locs_and_j_to_df, which takes
+    a collection of n points in space and n colors and creates
+    a dataframe of the kind used as input for this function.
+    '''
     if len(df)==0:
-        noro=locsdf.locs_and_j_to_df(
-            np.zeros((0,3),dtype=np.int),
-            np.zeros(0,dtype=np.int),
-        ),
-        return RolonyFPFNResult(
-            fn=self.n_spots,
-            fp=0,
-            fn_indices=np.zeros(0,dtype=np.int),
-            fp_indices=np.zeros(0,dtype=np.int),
-            fp_rolonies=noro,
-            fn_rolonies=self.rolonies.copy(),
-            agreement_rolonies=noro,
-        )
+        raise ValueError("second argument has no points")
 
     my_locs=np.c_[
         gt['m0'],
@@ -55,7 +85,6 @@ def match_colored_pointclouds(gt,df,radius,good_subset=None):
 
     agreement=(my_j[:,None]==their_j[None,:])
     dsts[~agreement]=np.inf # if the genes don't agree, it doesn't count
-
 
     # of the spots that we have that are good
     # how many are in df?
@@ -88,7 +117,8 @@ def match_colored_pointclouds(gt,df,radius,good_subset=None):
         agreement_df=locsdf.locs_and_j_to_df(
             their_locs[~fantasized_bad],
             their_j[~fantasized_bad],
-        )
+        ),
+        radius=radius
     )
 
 @dataclasses.dataclass
