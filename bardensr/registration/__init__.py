@@ -99,7 +99,7 @@ def apply_translations(imagestack,corrections,mode='valid',interpolation_method=
     for i in range(1,4):
         if imagestack.shape[i]==1:
             expandos.append(i)
-            if not np.allclose(corrections[:,i-1],corrections[:,0]):
+            if not np.allclose(corrections[:,i-1],corrections[0,i-1]):
                 raise ValueError(f"imagestack has shape only 1 along dimension {i-1}, yet"
                                     "corrections suggest we wiggle along that dimension")
         else:
