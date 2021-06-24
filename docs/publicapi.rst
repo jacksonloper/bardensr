@@ -10,3 +10,4 @@ Public API
    spotcalling
    registration
    preprocessing
+   plotting

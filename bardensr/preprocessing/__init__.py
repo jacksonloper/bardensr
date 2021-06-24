@@ -11,6 +11,12 @@ from . import preprocessing_tf
 def colorbleed_plot(framea,frameb):
     '''
     Generates a plot which may help determine if there is colorbleed between two frames.
+
+    Input:
+
+    - framea (M0 x M1 x M2)
+    - frameb (M0 x M1 x M2)
+
     '''
 
     import matplotlib.pylab as plt
@@ -24,15 +30,28 @@ def minmax(imagestack):
     '''
     Performs a simple per-frame normalization on the imagestack
     (subtract min, then divide by mean).
+
+    Input should be an imagestack of shape N x M0 x M1 x M2
     '''
 
-    return preprocessing_tf.mnmx(imagestack,[1,2,3]).numpy()
+    assert len(imagestack.shape)==4
+
+    return preprocessing_tf.minmax(imagestack,[1,2,3]).numpy()
 
 def background_subtraction(imagestack,sigmas):
     '''
     Perform a dead-basic background subtraction
     (subtracts a blurred version of the imagestack, and clips to stay positive).
+
+    Input:
+
+    - imagestack, N x M0 x M1 x M2
+    - sigmas, 3 float-ish numbers indicating how much to blur along
+      last 3 axes of the imagestack
     '''
+
+    assert len(imagestack.shape)==4
+
 
     return preprocessing_tf.background_subtraction(imagestack,[1,2,3],sigmas).numpy()
 
