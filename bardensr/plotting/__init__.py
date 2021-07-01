@@ -333,6 +333,8 @@ def focpt(m1,m2,bc,radius=10,j=None,X=None,**kwargs):
 
     plot_rbc(R,C,go,**kwargs)
 
+lutup4_meanings=['blue','green','yellow','red']
+
 def lutup4(A,B,C,D,sc=.5,normstyle='none'):
     '''
     Combine 4 real-valued images into one
@@ -520,7 +522,6 @@ class AnimAcross:
 
     '''
     def __init__(self,ratio=.8,sz=4,columns=None,asp=1.0):
-        self.aa=aa
         self.axes_list=[]
         self.cbs={}
         self.ratio=ratio

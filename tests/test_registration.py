@@ -1,4 +1,36 @@
+def test_distributed_estimation():
+    import bardensr
+    import numpy as np
+    import tensorflow as tf
+    import numpy.random as npr
+    # make data
+    npr.seed(0)
+    data=np.zeros((5,20,30,40))
+    pts=np.array([npr.randint(0,x,size=5) for x in data.shape[1:]]).T
+    for f in range(5):
+        data[(f,)+tuple(pts[f])]=1
 
+    # get pairwise correlations
+    D=np.zeros((3,5,5))
+    for f1 in range(5):
+        for f2 in range(5):
+            D[:,f1,f2] = bardensr.registration.pairwise_correlation_registration(data[f1],data[f2])
+
+    # try it out!
+    reconciliation=bardensr.registration.distributed_translation_estimator(D).T
+    with tf.device('cpu'):
+        newd,newt=bardensr.registration.apply_translations(data,reconciliation,'valid')
+    assert np.allclose(np.sum(np.prod(newd,axis=0)),1)
+
+def test_dotproducts():
+    import bardensr
+    import numpy as np
+    A=np.zeros((20,30,40))
+    B=np.zeros((20,30,40))
+    A[2,9,4]=1
+    B[7,3,11]=1
+    V,offset=bardensr.registration.dotproducts_at_translations(A,B,demean=True,cutin=[3,2,4])
+    assert np.allclose(bardensr.registration.pairwise_correlation_registration(A,B),[-5,6,-7])
 
 def test_find_translations_using_model():
     import bardensr

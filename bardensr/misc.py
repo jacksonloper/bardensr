@@ -1,3 +1,7 @@
+__all__ = [
+    'argmax_nd',
+]
+
 import numpy as np
 import tempfile
 import zipfile
@@ -7,6 +11,16 @@ import shutil
 import tensorflow as tf
 
 def argmax_nd(x):
+    '''
+    Compute the argmax of a tensor.
+
+    - Input: x, an n-dimensional numpy array
+    - Output: idx: an integer n-tuple indicating an index
+      where x reaches its greatest point
+
+    Seems like this is the kind of think numpy might provide,
+    but I think it isn't.
+    '''
     return np.unravel_index(np.argmax(x),x.shape)
 
 def tf_model_to_wire(model):

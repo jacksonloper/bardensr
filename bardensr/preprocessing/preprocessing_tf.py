@@ -1,6 +1,7 @@
 __all__=[
     'gaussian_filter_1d',
     'minmax',
+    'decimate_1d'
 ]
 
 import collections
@@ -8,6 +9,13 @@ import tensorflow as tf
 
 from .. import blur_kernels
 from .. import misc
+
+def decimate_1d(X,n,axis):
+    shp=tf.shape(X)
+    shp2=tf.concat([shp[:axis],[shp[axis]//n,n],shp[axis+1:]],0)
+    X=tf.reshape(X,shp2)
+    X=tf.reduce_mean(X,axis=axis+1)
+    return X
 
 def gaussian_filter_1d(X,sigma,axis):
     '''

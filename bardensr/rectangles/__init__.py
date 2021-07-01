@@ -1,4 +1,11 @@
+__all__= [
+    'Rectangle',
+    'LookGrabPut',
+    'tile_up_nd'
+]
+
 from .rectangle import Rectangle
+from .tiling import LookGrabPut,tile_up_nd
 
 def rectangle_intersection(st1,en1,st2,en2):
     st=np.array([st1,st2]).max(axis=0)

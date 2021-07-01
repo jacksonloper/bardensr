@@ -12,3 +12,4 @@ Public API
    preprocessing
    plotting
    benchmarks
+   rectangles
