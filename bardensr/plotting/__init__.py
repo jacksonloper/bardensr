@@ -415,6 +415,85 @@ def lutup4(A,B,C,D,sc=.5,normstyle='none'):
 
     return rez
 
+def lutup3(A,B,C,sc=.5,normstyle='none'):
+    '''
+    Combine 4 real-valued images into one
+    RGB image.
+
+    Input:
+
+    - A (M0 x M1 x M2 x ... M(n-1))
+    - B (M0 x M1 x M2 x ... M(n-1)) (or None)
+    - C (M0 x M1 x M2 x ... M(n-1)) (or None)
+    - sc, a scalar that helps normalize the images
+    - normstyle, indicating how the normalization should be done
+
+    Output is an array with dimensions
+
+        (M0 x M1 x M2 x ... M(n-1) x 3)
+
+    and dtype uint8, representing an image.
+    In this new image,
+
+    - signal from "A" is red
+    - signal from "B" is green
+    - signal from "C" is blue
+
+    There are different kinds of normalization that
+    can be applied to the images before they are combined
+    into an RGB image:
+
+    - "each" -- A,B,C are each normalized so that
+      their minimum is 0 and their maximum is sc
+    - "all" -- A,B,C is normalized together so
+      that the minimum over all of them is zero
+      and the maximum over all of them is sc
+    - "none" -- no normalization
+
+    After normalization, each real-valued image contributes
+    its portion to the red, green, and blue channels (as
+    described above), the result is clipped to lie between
+    0 and 1, then multiplied by 255, and finally cast to uint32.
+
+    '''
+
+    if B is None:
+        B=A*0
+    if C is None:
+        C=A*0
+
+
+
+    data=np.stack([A,B,C],axis=0).astype(float)
+
+    if normstyle=='each':
+        other_axes = tuple(range(1, len(data.shape)))
+        data-=np.min(data,axis=other_axes,keepdims=True)
+        data/=np.max(data,axis=other_axes,keepdims=True)
+    elif normstyle=='all':
+        data-=np.min(data)
+        data/=np.max(data)
+    elif normstyle=='none':
+        pass
+    else:
+        raise NotImplementedError(normstyle)
+
+    data[np.isnan(data)]=0
+
+    colors=np.array([
+        [1,0,0],  # RED
+        [0,1,0],  # GREEN!
+        [0,0,1],  # BLUE!
+    ])*np.array(sc)[...,None]
+
+    rez = np.einsum('l...,l...c->...c',data,colors)
+
+    rez=np.clip(rez,0,1)
+
+    rez=(rez*255).astype(np.uint8)
+
+    return rez
+
 def lutup(A,B,C,D,sc=.5,normstyle='none'):
     data=np.stack([A,B,C,D],axis=0).astype(float)
 

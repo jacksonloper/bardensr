@@ -1,36 +1,11 @@
 import tensorflow as tf
 import numpy as np
 
+from bardensr import tf_helpers
+
 #######################
 # translation kernels
 
-def construct_1dslice(shp,st,sz,axis):
-    '''
-    Input:
-    shp -- result of tf.shape
-    st -- scalar tf.int32
-    sz -- scalar tf.int32
-    axis -- scalar tf.int32
-
-    Output:
-    stv
-    szv
-
-    Such that
-    stv[i] = st if i==axis else 0
-    szv[i] = -1 if i==axis else shp[i]
-    '''
-
-    nd=tf.shape(shp)
-
-    # make stv
-    stv=tf.scatter_nd([[axis]],[st],nd)
-
-    # make szv
-    szv=tf.cast(tf.fill(nd,-1),dtype=tf.int32)
-    szv=tf.tensor_scatter_nd_update(szv,[[axis]],[sz])
-
-    return stv,szv
 
 
 def hermite_interpolation(val1,deriv1,val2,deriv2,t):
@@ -286,7 +261,7 @@ def hermite_small_translation_1d(X,axis,t,name=None):
         shp=tf.shape(X)
 
         # get four neighbors
-        stv,szv=construct_1dslice(shp,0,shp[axis]-3,axis)
+        stv,szv=tf_helpers.construct_1dslice(shp,0,shp[axis]-3,axis)
         W2 = tf.slice(X,stv,szv)
 
         stv=tf.tensor_scatter_nd_add(stv,[[axis]],[1])
@@ -356,7 +331,7 @@ def hermite_small_translation_1d_padded(X,axis,t,constant_values=0.0,name=None):
 
             with tf.name_scope('secants'):
                 # in the middle, we can get secant derivatives
-                stv,szv=construct_1dslice(shp,0,shp[axis]-2,axis)
+                stv,szv=tf_helpers.construct_1dslice(shp,0,shp[axis]-2,axis)
                 W = tf.slice(X,stv,szv)
                 stv=tf.tensor_scatter_nd_add(stv,[[axis]],[2])
                 E = tf.slice(X,stv,szv)
@@ -385,7 +360,7 @@ def hermite_small_translation_1d_padded(X,axis,t,constant_values=0.0,name=None):
         ##############
         # do interpolation
         with tf.name_scope("sliceandinterpolate"):
-            stv,szv=construct_1dslice(shp,0,shp[axis]+1,axis)
+            stv,szv=tf_helpers.construct_1dslice(shp,0,shp[axis]+1,axis)
             W = tf.slice(allvals,stv,szv)
             Wd = tf.slice(allderivs,stv,szv)
             stv=tf.tensor_scatter_nd_add(stv,[[axis]],[1])
@@ -414,7 +389,7 @@ def linear_small_translation_1d(X,axis,t,name=None):
         shp=tf.shape(X)
 
         # get two neighbors
-        stv,szv=construct_1dslice(shp,0,shp[axis]-1,axis)
+        stv,szv=tf_helpers.construct_1dslice(shp,0,shp[axis]-1,axis)
         W = tf.slice(X,stv,szv)
 
         stv=tf.tensor_scatter_nd_add(stv,[[axis]],[1])
@@ -456,7 +431,7 @@ def linear_small_translation_1d_padded(X,axis,t,constant_values=0.0,name=None):
         allvals=tf.pad(X,pad,constant_values=constant_values)
 
         # get two neighbors
-        stv,szv=construct_1dslice(shp,0,shp[axis]+1,axis)
+        stv,szv=tf_helpers.construct_1dslice(shp,0,shp[axis]+1,axis)
         W = tf.slice(allvals,stv,szv)
 
         stv=tf.tensor_scatter_nd_add(stv,[[axis]],[1])

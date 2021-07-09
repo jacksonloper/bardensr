@@ -80,37 +80,6 @@ class _HVP:
             raise Exception("HVP can only process one value")
 
 
-def contain_bad_searchdir(val,sd,lo=None,hi=None):
-    if (lo is None) and (hi is None):
-        return sd
-
-    bad=False
-    if lo is not None:
-        bad = bad | ((sd<0)&(val<=lo)) # searchdir says go down, but val says no!
-    if hi is not None:
-        bad = bad | ((sd>0)&(val>=hi)) # searchdir says go up, but val says no!
-
-    # zero out the badness)
-    zero=tf.cast(0,sd.dtype)
-    search_direction = tf.where(bad,zero,sd)
-
-    return search_direction
-
-
-ArmijoLinesearchPrep=collections.namedtuple('ArmijoLinesearchPrep',
-    [
-        'initial_guess',
-        'search_direction',
-        'travelling_distance',
-        'grad',
-        'loss',
-        'sd_dot_grad',
-        'lo',
-        'hi',
-        'lo_tf',
-        'hi_tf',
-    ])
-
 def inexact_newton_solve(lossfunc,initial_guess,maxiter=10):
 
     with tf.GradientTape() as t:

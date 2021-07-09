@@ -1,5 +1,27 @@
 
 
+def test_grad_sfd():
+    import bardensr
+    import numpy as np
+    import numpy.random as npr
+
+    A=npr.randn(5,6,7,8)
+    B=bardensr.preprocessing.preprocessing_tf.grad_sfd(A,[1,2])
+    assert np.allclose(B[2,:,:,4,0],A[2,2:,1:-1,4]-A[2,:-2,1:-1,4])
+    assert np.allclose(B[2,:,:,4,1],A[2,1:-1,2:,4]-A[2,1:-1,:-2,4])
+
+    x=npr.randn(5)
+    Lx=bardensr.preprocessing.preprocessing_tf.grad_sfd(x,[0])
+    y=npr.randn(*Lx.shape)
+    LTy=bardensr.preprocessing.preprocessing_tf.grad_sfd_transpose(y,[0])
+    assert np.allclose(np.sum(Lx*y),np.sum(x*LTy))
+
+    x=npr.randn(4,5,6,7)
+    Lx=bardensr.preprocessing.preprocessing_tf.grad_sfd(x,[1,2])
+    y=npr.randn(*Lx.shape)
+    LTy=bardensr.preprocessing.preprocessing_tf.grad_sfd_transpose(y,[1,2])
+    assert np.allclose(np.sum(Lx*y),np.sum(x*LTy))
+
 def test_bgsubtrac():
     import bardensr
     import numpy as np
