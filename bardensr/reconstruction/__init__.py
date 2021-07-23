@@ -3,6 +3,19 @@ import tensorflow_felzenszwalb_edt
 import numpy as np
 import numpy.random as npr
 
+
+
+def TV_loss(gt, est):
+    '''
+    input (est and gt) are both size of (S,M0,M1,M2)
+    '''
+    out_list = []
+    for j in range(len(est)):
+        out = .5*(tf.reduce_sum(tf.math.abs(est[j]/tf.reduce_sum(est[j]) - gt[j]/tf.reduce_sum(gt[j]))))
+        out_list.append(out)
+    return(tf.convert_to_tensor(out_list))    
+
+
 def morphedt2(f,maxout=100000.0,axes=(0,1)):
     f=tf.convert_to_tensor(f,dtype=tf.float32)
     g=tensorflow_felzenszwalb_edt.edt1d(maxout*(1-f),axes[0])[0]

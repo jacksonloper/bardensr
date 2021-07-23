@@ -1,3 +1,4 @@
+import numpy as np
 from .rectangle import Rectangle
 
 def rectangle_intersection(st1,en1,st2,en2):

@@ -54,6 +54,8 @@ def pal(tensor,indices,updates):
 
     return tf.tensor_scatter_nd_update(tensor,indices2,ravupt)
 
+
+
 def solve_lp_batched(c,A,b,maxiter=100,tol=1e12,use_tqdm_notebook=False):
     '''
     attempts to solve
