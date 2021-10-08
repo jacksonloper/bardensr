@@ -177,8 +177,10 @@ def process(
     trange=tiles
     for tile in maybe_tqdm(tiles,tqdm_notebook):
         dtile = tiling.downsample_multitile(tile,downsample_level)
-        Xsub = X[tile.look] # get sub-data
-        Fsub = F[dtile.look] # get sub-densities
+        slices_tile_l = [slice(x,y) for x,y in zip(tile.look.start,tile.look.stop)]
+        slices_dtile_l = [slice(x,y) for x,y in zip(dtile.look.start,dtile.look.stop)]
+        Xsub = X[slices_tile_l[0],slices_tile_l[1],slices_tile_l[2]] # get sub-data
+        Fsub = F[slices_dtile_l[0],slices_dtile_l[1],slices_dtile_l[2]] # get sub-densities
         Fsubrav = np.reshape(Fsub,(-1,J+n_unused_barcodes))
         good=np.max(Fsubrav,axis=0)>thresh # get codes with promise
         good[-n_unused_barcodes:]=True # always keep the unused barcodes
@@ -194,7 +196,10 @@ def process(
 
         # save it
         codes.append(np.where(good)[0])
-        Fs.append(model2.F_scaled()[tile.grab])
+        Fs.append(model2.F_scaled()[tile.grab.start[0]:tile.grab.stop[0],
+                                    tile.grab.start[1]:tile.grab.stop[1],
+                                    tile.grab.start[2]:tile.grab.stop[2],
+                                   ])
 
     # stitch it together as a sparse matrix
     M1s=[]
