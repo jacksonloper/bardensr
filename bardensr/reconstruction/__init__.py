@@ -47,15 +47,15 @@ class EDTConvAndTransposeNet(tf.Module):
         self.smooths=tf.Variable(npr.rand(n_rads).astype(np.float32)+init_smooth)
         self.catn=ConvAndTransposeNet(*args,**kwargs)
 
-    def apply_edt(self,batch):
-        axes=list(range(1,len(batch.shape)))
+    def apply_edt(self,batch): # 
+        axes=list(range(1,len(batch.shape)))  # 1,2,3
         lst=[batch]
         for i in range(self.n_rads):
             lst.append(skelly(batch,radius=self.rads[i],smooth=self.smooths[i],axes=axes))
-        return tf.stack(lst,axis=-1)
+        return tf.stack(lst,axis=-1)  # now the channle is last!
 
     def __call__(self,x):
-        x=self.apply_edt(x)
+        x=self.apply_edt(x)  # (S,channel,M0, M1,M2)
         fui,fuo=self.catn.run_all(x)
         return fui[-1],fuo[-1]
 
