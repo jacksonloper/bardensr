@@ -8,6 +8,7 @@ import numpy.random as npr
 
 from .. import misc
 from . import purepixel
+from .. import spot_calling
 
 import logging
 logger=logging.getLogger(__name__)
@@ -74,7 +75,7 @@ def get_denselearner_reconstruction(X,codebook,blob_radius=None,blur_level=0,
 
     # run bardensr
     estimated_plus_phony[np.isnan(estimated_plus_phony)]=0.0
-    bdresult=singlefov.denselearner.build_density(X,estimated_plus_phony,use_tqdm_notebook=False,
+    bdresult=spot_calling.blackberry.denselearner.build_density(X,estimated_plus_phony,use_tqdm_notebook=False,
                                                               niter=niter,lam=lam,blur_level=blur_level)
 
     # get the reconstruction
