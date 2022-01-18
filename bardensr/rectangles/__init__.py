@@ -1,9 +1,4 @@
-__all__= [
-    'Rectangle',
-    'LookGrabPut',
-    'tile_up_nd'
-]
-
+import numpy as np
 from .rectangle import Rectangle
 from .tiling import LookGrabPut,tile_up_nd
 
