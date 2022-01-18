@@ -14,6 +14,18 @@ def prod(lst,start):
 
 @dataclasses.dataclass
 class LookGrabPut:
+    '''
+    A collection of 3 rectangles, designed for
+    tiling computations.
+
+    - look indexes into data.   you should look at
+      that part of the data and process it.
+    - after you've processed that subset of the data,
+      you should grab a further subsets (to avoid
+      border effects).
+    - and finally that subset of the subset corresponds
+      to the "put" region in the original data.
+    '''
     look: Rectangle
     grab: Rectangle
     put: Rectangle
@@ -278,13 +290,38 @@ def calc_neighborhood_structure(tiles):
 
 def tile_up_nd(shp,inner_szs,border_szs=None,outer_border=True,last_edge_behavior='short'):
     '''
+    Takes a box of size shape and tiles it up into LookGrabPut objects.
+
     Input:
+
     - shape
     - inner_szs (one for each dim in shape)
     - border_szs(one for each dim in shape)
+    - outer_border -- whether to put any results into
+      the outer border of the data, where there is no way
+      to avoid border effects
+    - last_edge_behavior -- 'reduplicate', 'short', or 'short' or 'drop'.
+      reduplicate means we'll end up processing some parts of the data
+      more than necessary, but every tile will have the same shape.  short
+      means some of the tiles will be shorter.  drop means we may not
+      process all the data if it doesn't divide evenly into tiles.
 
-    Output
-    - a list of MultiTile objects
+    Output:
+
+    - a list of LookGrabPut objects
+
+    For example, this can be used to batch up computation
+    of applying a gaussian blur to some data ::
+
+        X=npr.randn(5000) # <-- some data
+        Y=np.zeros(5000) # <-- where we want to store output
+
+        lgps=tile_up_nd((5000,),(1000,),(10,))
+        for lgp in lgps:
+            subdata = X[lgp.look] # <-- a subset of the data
+            subdata_processed = sp.ndimage.gaussian_filter(subdata,2)
+            subdata_processed_without_bad_borders=subdata_processed[lgp.grab]
+            Y[lgp.put]=subdata_processed_without_bad_borders
     '''
 
     shp=np.require(shp,dtype=int)

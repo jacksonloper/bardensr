@@ -3,7 +3,7 @@ from setuptools import setup
 setup(
     name='bardensr',
     author='Jackson Loper',
-    version='0.3',
+    version='0.3.1',
     include_package_data=True,
     description='barcode demixing through nonnegative spatial regression',
     packages=[
@@ -14,9 +14,11 @@ setup(
         'bardensr.optimization',
         'bardensr.plotting',
         'bardensr.reconstruction',
+        'bardensr.preprocessing',
         'bardensr.rectangles',
         'bardensr.registration',
         'bardensr.spot_calling',
+        'bardensr.spot_calling.blackberry',
     ],
     package_data={
         '': ['*.hdf5']

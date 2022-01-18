@@ -111,8 +111,11 @@ def minimize(method,inner_func,t,maxiter,momentum=0.8,lr=None,first_step_size=.1
                 raise NotImplementedError(first_step_size_norm)
             lr=first_step_size/mag
 
-        opt=tf.optimizers.SGD(momentum=momentum,lr=lr)
+        assert not np.isnan(lr),f'initial gradient magnitude={mag}'
+
+        opt=tf.optimizers.SGD(momentum=momentum,learning_rate=lr)
         for i in range(maxiter):
+            assert not np.isnan(t.numpy()).any()
             l,g=inner_func(tf.convert_to_tensor(t))
             losses.append(l.numpy())
             ts.append(t.numpy().copy())
@@ -124,23 +127,11 @@ def minimize(method,inner_func,t,maxiter,momentum=0.8,lr=None,first_step_size=.1
     else:
         raise NotImplementedError(method)
 
-
 def lowrankregister(mini,codebook,zero_padding=10,
             use_tqdm_notebook=False,niter=50,
             optimization_method='sgd',
             optimization_settings=None,
-            compiled_functions=None):
-    ts,losses,optim=_lowrankregister(mini,codebook,zero_padding=zero_padding,
-            use_tqdm_notebook=use_tqdm_notebook,niter=niter,
-            optimization_method=optimization_method,
-            optimization_settings=optimization_settings,
-            compiled_functions=compiled_functions)
-    return ts[-1]
-
-def _lowrankregister(mini,codebook,zero_padding=10,
-            use_tqdm_notebook=False,niter=50,
-            optimization_method='sgd',
-            optimization_settings=None,
+            initial_guess=None,
             compiled_functions=None):
     '''
     Input
@@ -171,6 +162,10 @@ def _lowrankregister(mini,codebook,zero_padding=10,
     t=np.zeros((F,nd))-zero_padding
     t=tf.identity(t)
     t=tf.cast(t,dtype=tf.float64)
+
+    if initial_guess is not None:
+        initial_guess = initial_guess-np.mean(initial_guess,axis=0,keepdims=True)
+        t=t+tf.convert_to_tensor(initial_guess)
 
     # gradient descent
     def inner_func(xt):

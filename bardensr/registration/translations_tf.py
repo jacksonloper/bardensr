@@ -117,8 +117,13 @@ def floating_slices(X,t,sz,interpolation_method,cval=0):
     * Y -- K x [[sz]]
 
     '''
-    newXs = [floating_slice(X[f],t[f],sz,interpolation_method,cval) for f in range(X.shape[0])]
-    return tf.stack(newXs,axis=0)
+    return tf.map_fn(
+        lambda inp: floating_slice(inp[0],inp[1],sz,interpolation_method,cval),
+        (X,t),
+        fn_output_signature=X.dtype
+    )
+    # newXs = [floating_slice(X[f],t[f],sz,interpolation_method,cval) for f in range(X.shape[0])]
+    # return tf.stack(newXs,axis=0)
 
 def floating_slice(X,t,sz,interpolation_method,constant_values=0,name=None):
     '''

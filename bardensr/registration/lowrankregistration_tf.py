@@ -6,6 +6,7 @@ def _calc_loss(X,code,t,sz):
     Proportion of the variance unexplained by using
     a single code to explain each pixel.
     '''
+    tf.debugging.assert_all_finite(t,'translations have become nan; check validity of codebook')
     newX = translations_tf.floating_slices(X,t,sz,'hermite')
     dots=tf.einsum('fj,f...->...j',code,newX)
 
@@ -57,7 +58,6 @@ def _calc_loss_and_grad(X,code,t,sz):
         tape.watch(t)
         loss=_calc_loss(X,code,t,sz)
     grad=tape.gradient(loss,t)
-
 
     #######################
     # we do things as above to keep things

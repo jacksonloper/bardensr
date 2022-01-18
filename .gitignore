@@ -6,7 +6,11 @@ __pycache__/
 # C extensions
 *.so
 
+# other stuff
+test_notebooks
 junk.py
+.DS_Store
+.vscode
 
 # Distribution / packaging
 .Python

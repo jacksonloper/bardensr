@@ -1,3 +1,9 @@
+__all__=[
+    'lutup4',
+    'AnimGif',
+    'AnimAcross'
+]
+
 import matplotlib.pylab as plt
 import numpy as np
 from .. import rectangles
@@ -21,6 +27,31 @@ def savefig_PIL(format='png',bbox_inches='tight',**kwargs):
     return s
 
 class AnimGif:
+    '''
+    A context-manger for making animated gifs from matplotlib.  It
+    is inefficient but reliable.  Usage is best explained by example::
+
+        import matplotlib.pyplot as plt
+        import bardensr.plotting
+        with bardensr.plotting.AnimGif(duration=250) as a:
+            for i in range(10):
+                # do some matplotlib stuf
+                plt.plot([0],[i],'rx')
+                plt.ylim(0,10)
+                a() # call a to indicate that we're doine with this frame
+        with open('foo.gif','wb') as f:
+            f.write(a.gif) # write gif to file
+        ~a # return IPython.display.Image object that can be viewed in notebook
+
+    Arguments:
+
+    - format -- what kind of images to save matplotlib figures as (they'll
+      all get converted to gif eventually tho)
+    - bbox_inches -- what bbox_inches to use when calling
+      ``matplotlib.pyplot.save``
+    - duration -- how long each frame of the gif be, in milliseconds
+
+    '''
     def __init__(self,format='png',bbox_inches='tight',duration=250):
         self.imgs=[]
         self.format=format
@@ -302,6 +333,88 @@ def focpt(m1,m2,bc,radius=10,j=None,X=None,**kwargs):
 
     plot_rbc(R,C,go,**kwargs)
 
+lutup4_meanings=['blue','green','yellow','red']
+
+def lutup4(A,B,C,D,sc=.5,normstyle='none'):
+    '''
+    Combine 4 real-valued images into one
+    RGB image.
+
+    Input:
+
+    - A (M0 x M1 x M2 x ... M(n-1))
+    - B (M0 x M1 x M2 x ... M(n-1))
+    - C (M0 x M1 x M2 x ... M(n-1))
+    - D (M0 x M1 x M2 x ... M(n-1))
+    - sc, a scalar that helps normalize the images
+    - normstyle, indicating how the normalization should be done
+
+    Output is an array with dimensions
+
+        (M0 x M1 x M2 x ... M(n-1) x 3)
+
+    and dtype uint8, representing an image.
+    In this new image,
+
+    - signal from "A" is blueish
+      (contributing 1 unit of red, 2 units of green,
+      and 4 units of blue)
+    - signal from "B" is greenish
+      (contributing one unit of red, four units of green,
+      and two units of blue)
+    - signal from "C" is yellowish
+      (contributing three units of red, three units of green,
+      and one unit of blue)
+    - signal from "D" is reddish
+      (contributing four units of red, two units of green,
+      and one unit of blue)
+
+    There are different kinds of normalization that
+    can be applied to the images before they are combined
+    into an RGB image:
+
+    - "each" -- A,B,C,D are each normalized so that
+      their minimum is 0 and their maximum is sc
+    - "all" -- A,B,C,D is normalized together so
+      that the minimum over all of them is zero
+      and the maximum over all of them is sc
+    - "none" -- no normalization
+
+    After normalization, each real-valued image contributes
+    its portion to the red, green, and blue channels (as
+    described above), the result is clipped to lie between
+    0 and 1, then multiplied by 255, and finally cast to uint32.
+
+    '''
+    data=np.stack([A,B,C,D],axis=0).astype(float)
+
+    if normstyle=='each':
+        other_axes = tuple(range(1, len(data.shape)))
+        data-=np.min(data,axis=other_axes,keepdims=True)
+        data/=np.max(data,axis=other_axes,keepdims=True)
+    elif normstyle=='all':
+        data-=np.min(data)
+        data/=np.max(data)
+    elif normstyle=='none':
+        pass
+    else:
+        raise NotImplementedError(normstyle)
+
+    colors=np.array([
+        [1,2,4],  # BLUE!
+        [1,4,2],  # GREEN!
+        [3,3,1],  # YELLOWY!
+        [4,2,1],  # RED!
+    ])*sc
+
+    rez = np.einsum('l...,l...c->...c',data,colors)
+
+    rez=np.clip(rez,0,1)
+
+    rez=(rez*255).astype(np.uint8)
+
+    return rez
+
 def lutup(A,B,C,D,sc=.5,normstyle='none'):
     data=np.stack([A,B,C,D],axis=0).astype(float)
 
@@ -332,10 +445,10 @@ def lutup(A,B,C,D,sc=.5,normstyle='none'):
 
     return rez
 
-def gify(X,sc=.5,normeach=False,duration=250):
+def gify(X,sc=.5,normstyle='none',duration=250):
     import PIL
     import io
-    imgs=[lutup(*x,sc=sc,normeach=normeach) for x in X]
+    imgs=[lutup(*x,sc=sc,normstyle=normstyle) for x in X]
     imgs=[PIL.Image.fromarray(x) for x in imgs]
     with io.BytesIO() as f:
         imgs[0].save(f,save_all=True,append_images=imgs[1:],
@@ -379,8 +492,36 @@ def hexlbin(a,b,c=None,**kwargs):
     plt.hexbin(a,b,c,reduce_C_function=lambda x:np.log(1+np.sum(x)),**kwargs)
 
 class AnimAcross:
-    def __init__(self,ratio=.8,sz=4,columns=None,aa=None,asp=1.0):
-        self.aa=aa
+    '''
+    A context-manger for making a bunch of subplots, laid out
+    in a grid from left to right, top to bottom::
+
+        import matplotlib.pyplot as plt
+        import bardensr.plotting
+        with bardensr.plotting.AnimAcross(columns=3) as a:
+            for i in range(10):
+                ~a # invert a to indicate that we want to make a new frame
+                # do some matplotlib stuf
+                plt.plot([0],[i],'rx')
+                plt.ylim(0,10)
+
+    Arguments:
+
+    - ratio -- controls how close subplots are together
+    - sz -- controls how big subplots are
+    - columns -- how many columns of subplots
+    - asp -- controls aspect ratio of subplots
+
+    NOTE.  ``matplotlib.pyplot.colorbar`` doesn't play nicely
+    with the way these plots are laid out (it tries to create
+    a new subplot, but doesn't know where to put it because
+    the subplots aren't laid out until the end of the context
+    manager).  You can use a pattern like ``a.cb(plt.imshow(foo))``
+    to put a colorbar associated with a mappable (such as is
+    returned by ``imshow``) next to the current subplot.
+
+    '''
+    def __init__(self,ratio=.8,sz=4,columns=None,asp=1.0):
         self.axes_list=[]
         self.cbs={}
         self.ratio=ratio
@@ -389,10 +530,7 @@ class AnimAcross:
         self.asp=asp
 
     def __enter__(self):
-        if self.aa is not None:
-            return self.aa
-        else:
-            return self
+        return self
 
     def __pos__(self):
         self.axes_list.append(
@@ -419,9 +557,6 @@ class AnimAcross:
         self.cbs[idx] = mappable
 
     def __exit__(self,exc_type,exc_val,exc_tb):
-        if self.aa is not None:
-            return
-
         if self.columns is None:
             dims=[
                 (1,1), # no plots

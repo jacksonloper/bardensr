@@ -1,0 +1,6 @@
+git+https://github.com/jacksonloper/bardensr.git
+myst-parser
+autodocsumm
+ipython
+matplotlib
+Pillow
