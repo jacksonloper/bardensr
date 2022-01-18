@@ -45,6 +45,14 @@ class LookGrabPut:
         else:
             return other*self
 
+        
+        
+def downsample_multitile(mt,ds):
+    return LookGrabPut(
+        Rectangle(mt.look.start//ds,mt.look.stop//ds),
+        Rectangle(mt.grab.start//ds,mt.grab.stop//ds),
+        Rectangle(mt.put.start//ds,mt.put.stop//ds)
+    )
 
 
 def tile_up_simple(start,stop,sz):

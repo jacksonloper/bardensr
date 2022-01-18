@@ -74,4 +74,4 @@ def seek_barcodes_by_signalprop(X,r2_thre,thre_onehot=1.0,use_l2=True,lowg=.001,
         # convert to a normal codebook form
         barcodes_found=misc.convert_codebook_to_onehot_form(barcodes_found)
 
-        return barcodes_found
+        return barcodes_found, channelchoicesfl
