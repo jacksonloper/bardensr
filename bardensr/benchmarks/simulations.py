@@ -256,3 +256,50 @@ def bcs_to_imagestack(rolonies,bcs,js_to_skip=None):
 
     return X
 '''
+
+
+
+#### generate benchmark data from GT voxel. 
+def gtvox_2_bench(GT_voxels, poisson_rate, 
+                  voxsize = (.1,.1,.1),  #in um 
+                  voxpsf = (.2,.2,.2),  # in um. 
+                  R=17,C=4,seed=51):
+        
+    from .. import misc
+    from . import Benchmark
+    import uuid
+    
+    blr = voxpsf[0]/voxsize[0],voxpsf[1]/voxsize[1], voxpsf[2]/voxsize[2]
+    units_int = f'PSF size (um): {voxpsf}\nvoxsize (ium) {voxsize}\nblur size (voxels): {blr}'
+    all_c = []
+    locations2=np.empty(shape = (0, 4), dtype = 'int')
+    for j in range(GT_voxels['j'].max()+1):  # from 0 to 974 (total 975)
+        loc = GT_voxels[GT_voxels['j'] == j].values
+        c_j = np.random.poisson(poisson_rate*np.product(voxsize), size=len(loc))
+        all_c.append(c_j.sum())
+        loc_2 = np.repeat(loc, c_j, axis = 0)
+        locations2 = np.concatenate((locations2, loc_2), axis = 0)
+    rolonies=pd.DataFrame(dict(
+        m0=locations2[:,0],
+        m1=locations2[:,1],
+        m2=locations2[:,2],
+        j=locations2[:,3],
+    ))
+    np.random.seed(seed)
+    codebook=simulate_codebook(R,C,GT_voxels['j'].max()+1)
+    codebook_happiness=misc.nan_robust_hamming(codebook.reshape((R*C,-1)),codebook.reshape((R*C,-1)))
+    n=len(codebook_happiness)
+    codebook_happiness[np.r_[0:n],np.r_[0:n]]=np.inf
+    
+    X=simulate_imagestack(rolonies,codebook, 
+                          blursz=blr,   # note this may need to be chaged. 
+                          per_frame_signal_range=(0.8, 1.0),
+                          dropout_probability = 0.0)
+    bench = Benchmark(
+        'just tmp bench',str(uuid.uuid1()),0,
+        X.astype(float),codebook,
+        rolonies=rolonies,
+        GT_voxels = GT_voxels,
+        units=units_int)    
+    
+    return(bench)
