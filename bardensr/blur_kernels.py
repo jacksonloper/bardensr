@@ -18,9 +18,9 @@ def gaussian_filter_3d(X,sigmas):
     '''
 
     nd=len(X.shape)
-    X=gaussian_filter_1d(X,sigmas[0],nd-3)
-    X=gaussian_filter_1d(X,sigmas[1],nd-2)
-    X=gaussian_filter_1d(X,sigmas[2],nd-1)
+    X=gaussian_filter_1d(X,sigmas[0],0)
+    X=gaussian_filter_1d(X,sigmas[1],1)
+    X=gaussian_filter_1d(X,sigmas[2],2)
 
     return X
 
