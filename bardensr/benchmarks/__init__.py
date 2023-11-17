@@ -483,7 +483,7 @@ def load_h5py(fn):
 
         rn={}
         for nm in ['j','m0','m1','m2']:
-            rn[nm]=f['rolonies/'+nm][:].astype(np.int)
+            rn[nm]=f['rolonies/'+nm][:].astype(int)
         for nm in ['remarks','status']:
             rn[nm]=f['rolonies/'+nm][:].astype('U')
         dct['rolonies']=pd.DataFrame(rn)
@@ -491,7 +491,7 @@ def load_h5py(fn):
         if 'GT_voxels' in f:
             rn={}
             for nm in ['j','m0','m1','m2']:
-                rn[nm]=f['GT_voxels/'+nm][:].astype(np.int)
+                rn[nm]=f['GT_voxels/'+nm][:].astype(int)
             dct['GT_voxels']=pd.DataFrame(rn)
         else:
             dct['GT_voxels']=None
