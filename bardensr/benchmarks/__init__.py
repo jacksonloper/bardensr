@@ -224,7 +224,7 @@ def meanmin_divergence(u,v):
 
 
 def downsample1(x,ds,axis=0):
-    newshape=np.array(x.shape,dtype=np.int)
+    newshape=np.array(x.shape,dtype=int)
     newshape[axis]=np.ceil(newshape[axis]/ds)
     newguy=np.zeros(newshape,dtype=x.dtype)
 
@@ -273,9 +273,9 @@ class Benchmark:
         R,C=self.codebook.shape[:2]
         bc3=self.copy()
         bc3.X=np.array([[downsample_nd(bc3.X[r,c],dsd) for c in range(C)] for r in range(R)])
-        bc3.rolonies['m0']=np.require(bc3.rolonies['m0']//dsd,dtype=np.int)
-        bc3.rolonies['m1']=np.require(bc3.rolonies['m1']//dsd,dtype=np.int)
-        bc3.rolonies['m2']=np.require(bc3.rolonies['m2']//dsd,dtype=np.int)
+        bc3.rolonies['m0']=np.require(bc3.rolonies['m0']//dsd,dtype=int)
+        bc3.rolonies['m1']=np.require(bc3.rolonies['m1']//dsd,dtype=int)
+        bc3.rolonies['m2']=np.require(bc3.rolonies['m2']//dsd,dtype=int)
         return bc3
 
     def copy(self,copy_imagestack=False,copy_codebook=False):
@@ -307,7 +307,7 @@ class Benchmark:
             f.create_dataset('codebook',data=self.codebook)
             f.create_group('rolonies')
             for nm in ['j','m0','m1','m2']:
-                ds=np.array(self.rolonies[nm]).astype(np.int)
+                ds=np.array(self.rolonies[nm]).astype(int)
                 f.create_dataset('rolonies/'+nm,data=ds)
             for nm in ['remarks','status']:
                 ds=np.array(self.rolonies[nm]).astype("S")
@@ -319,7 +319,7 @@ class Benchmark:
             if self.GT_voxels is not None:
                 f.create_group('GT_voxels')
                 for nm in ['j','m0','m1','m2']:
-                    ds=np.array(self.GT_voxels[nm]).astype(np.int)
+                    ds=np.array(self.GT_voxels[nm]).astype(int)
                     f.create_dataset('GT_voxels/'+nm,data=ds)
 
             if self.GT_meshes is not None:
@@ -388,14 +388,14 @@ class Benchmark:
     def rolony_fpfn(self,df,radius,good_subset=None):
         if len(df)==0:
             noro=locsdf.locs_and_j_to_df(
-                np.zeros((0,3),dtype=np.int),
-                np.zeros(0,dtype=np.int),
+                np.zeros((0,3),dtype=int),
+                np.zeros(0,dtype=int),
             ),
             return RolonyFPFNResult(
                 fn=self.n_spots,
                 fp=0,
-                fn_indices=np.zeros(0,dtype=np.int),
-                fp_indices=np.zeros(0,dtype=np.int),
+                fn_indices=np.zeros(0,dtype=int),
+                fp_indices=np.zeros(0,dtype=int),
                 fp_rolonies=noro,
                 fn_rolonies=self.rolonies.copy(),
                 agreement_rolonies=noro,
